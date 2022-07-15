@@ -16,6 +16,7 @@ package resourcedetectionprocessor // import "github.com/open-telemetry/opentele
 
 import (
 	"context"
+	"github.com/open-telemetry/opentelemetry-collector-contrib/processor/resourcedetectionprocessor/internal/oci"
 	"strings"
 	"sync"
 	"time"
@@ -76,6 +77,7 @@ func NewFactory() component.ProcessorFactory {
 		gcp.DeprecatedGKETypeStr: gcp.NewDetector,
 		gcp.DeprecatedGCETypeStr: gcp.NewDetector,
 		oke.TypeStr:              oke.NewDetector,
+		oci.TypeStr:              oci.NewDetector,
 		system.TypeStr:           system.NewDetector,
 	})
 
