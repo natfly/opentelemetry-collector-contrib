@@ -15,6 +15,7 @@
 package resourcedetectionprocessor // import "github.com/open-telemetry/opentelemetry-collector-contrib/processor/resourcedetectionprocessor"
 
 import (
+	"github.com/open-telemetry/opentelemetry-collector-contrib/processor/resourcedetectionprocessor/internal/oci"
 	"go.opentelemetry.io/collector/config"
 	"go.opentelemetry.io/collector/config/confighttp"
 
@@ -54,6 +55,9 @@ type DetectorConfig struct {
 
 	// SystemConfig contains user-specified configurations for the System detector
 	SystemConfig system.Config `mapstructure:"system"`
+
+	// SystemConfig contains user-specified configurations for the System detector
+	OCIConfig oci.Config `mapstructure:"oci"`
 }
 
 func (d *DetectorConfig) GetConfigFromType(detectorType internal.DetectorType) internal.DetectorConfig {
@@ -64,6 +68,8 @@ func (d *DetectorConfig) GetConfigFromType(detectorType internal.DetectorType) i
 		return d.ConsulConfig
 	case system.TypeStr:
 		return d.SystemConfig
+	case oci.TypeStr:
+		return d.OCIConfig
 	default:
 		return nil
 	}

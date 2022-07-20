@@ -57,25 +57,18 @@ func NewProvider() Provider {
 // OciMetadata is the OCI instance metadata response format
 type OciMetadataReponse struct {
 	TenantId            string
-	AvailabilityDomain  string         `json:"availabilityDomain"`
-	FaultDomain         string         `json:"faultDomain"`
-	CompartmentId       string         `json:"compartmentId"`
-	DisplayName         string         `json:"displayName"`
-	Hostname            string         `json:"hostname"`
-	Id                  string         `json:"id"`
-	Image               string         `json:"image"`
-	Region              string         `json:"region"`
-	CanonicalRegionName string         `json:"canonicalRegionName"`
-	OciAdName           string         `json:"ociAdName"`
-	Shape               string         `json:"shape"`
-	ShapeConfig         OciShapeConfig `json:"shapeConfig"`
-}
-
-type OciShapeConfig struct {
-	OCpus                     float32 `json:"ocpus"`
-	MemoryInGBs               float32 `json:"memoryInGBs"`
-	NetworkingBandwidthInGbps float32 `json:"networkingBandwidthInGbps"`
-	MaxVnicAttachments        int     `json:"maxVnicAttachments"`
+	AvailabilityDomain  string `json:"availabilityDomain"`
+	FaultDomain         string `json:"faultDomain"`
+	CompartmentId       string `json:"compartmentId"`
+	DisplayName         string `json:"displayName"`
+	Hostname            string `json:"hostname"`
+	Id                  string `json:"id"`
+	Image               string `json:"image"`
+	Region              string `json:"region"`
+	CanonicalRegionName string `json:"canonicalRegionName"`
+	OciAdName           string `json:"ociAdName"`
+	Shape               string `json:"shape"`
+	RawResponse         string
 }
 
 // Metadata queries a given endpoint and parses the output
@@ -125,6 +118,7 @@ func (p *ociProviderImpl) Metadata(ctx context.Context) (*OciMetadataReponse, er
 	}
 
 	metadata.TenantId = extractTenancyIDFromCertificate(identityCert)
+	metadata.RawResponse = string(respBody)
 
 	return metadata, nil
 }

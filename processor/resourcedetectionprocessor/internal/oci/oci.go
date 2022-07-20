@@ -18,6 +18,7 @@ import (
 	"context"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/internal/metadataproviders/oci"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/processor/resourcedetectionprocessor/internal"
+	"github.com/tidwall/gjson"
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	conventions "go.opentelemetry.io/collector/semconv/v1.6.1"
@@ -26,22 +27,26 @@ import (
 
 const (
 	// TypeStr is type of detector.
-	TypeStr = "oci"
+	TypeStr         = "oci"
+	attributePrefix = "oci."
 )
 
 var _ internal.Detector = (*Detector)(nil)
 
 // Detector is an OCI metadata detector
 type Detector struct {
-	provider oci.Provider
-	logger   *zap.Logger
+	provider        oci.Provider
+	attributeJPaths []AttributeJPathConfig
+	logger          *zap.Logger
 }
 
 // NewDetector creates a new OCI metadata detector
 func NewDetector(p component.ProcessorCreateSettings, cfg internal.DetectorConfig) (internal.Detector, error) {
+	config := cfg.(Config)
 	return &Detector{
-		provider: oci.NewProvider(),
-		logger:   p.Logger,
+		provider:        oci.NewProvider(),
+		logger:          p.Logger,
+		attributeJPaths: config.AttributeJPaths,
 	}, nil
 }
 
@@ -58,7 +63,6 @@ func (d *Detector) Detect(ctx context.Context) (resource pcommon.Resource, schem
 	}
 
 	attrs.InsertString(conventions.AttributeCloudProvider, "oci")
-	attrs.InsertString(conventions.AttributeCloudPlatform, "oci_compute")
 	attrs.InsertString(conventions.AttributeCloudAccountID, oci.TenantId)
 	attrs.InsertString(conventions.AttributeCloudRegion, oci.CanonicalRegionName)
 	attrs.InsertString(conventions.AttributeCloudAvailabilityZone, oci.AvailabilityDomain)
@@ -66,6 +70,15 @@ func (d *Detector) Detect(ctx context.Context) (resource pcommon.Resource, schem
 	attrs.InsertString(conventions.AttributeHostImageID, oci.Image)
 	attrs.InsertString("oci.compartment.id", oci.CompartmentId)
 	attrs.InsertString("oci.shape", oci.Shape)
+
+	if len(d.attributeJPaths) != 0 {
+		for _, entry := range d.attributeJPaths {
+			value := gjson.Get(oci.RawResponse, entry.Path)
+			if value.Exists() {
+				attrs.UpsertString(attributePrefix+entry.Name, value.String())
+			}
+		}
+	}
 
 	return res, conventions.SchemaURL, nil
 }
