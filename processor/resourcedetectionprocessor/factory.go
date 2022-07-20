@@ -38,7 +38,6 @@ import (
 	"github.com/open-telemetry/opentelemetry-collector-contrib/processor/resourcedetectionprocessor/internal/docker"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/processor/resourcedetectionprocessor/internal/env"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/processor/resourcedetectionprocessor/internal/gcp"
-	"github.com/open-telemetry/opentelemetry-collector-contrib/processor/resourcedetectionprocessor/internal/oci/oke"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/processor/resourcedetectionprocessor/internal/system"
 )
 
@@ -76,7 +75,6 @@ func NewFactory() component.ProcessorFactory {
 		// TODO(#10348): Remove GKE and GCE after the v0.54.0 release.
 		gcp.DeprecatedGKETypeStr: gcp.NewDetector,
 		gcp.DeprecatedGCETypeStr: gcp.NewDetector,
-		oke.TypeStr:              oke.NewDetector,
 		oci.TypeStr:              oci.NewDetector,
 		system.TypeStr:           system.NewDetector,
 	})
