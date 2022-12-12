@@ -21,18 +21,17 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"go.opentelemetry.io/collector/component/componenttest"
-	"go.opentelemetry.io/collector/config/configtest"
 )
 
 func TestCreateDefaultConfig(t *testing.T) {
 	factory := NewFactory()
 	cfg := factory.CreateDefaultConfig()
 	assert.NotNil(t, cfg, "failed to create default config")
-	assert.NoError(t, configtest.CheckConfigStruct(cfg))
+	assert.NoError(t, componenttest.CheckConfigStruct(cfg))
 }
 
 func TestCreateExporter(t *testing.T) {
-	defer setPdataFeatureGateForTest(true)()
+	defer setPdataFeatureGateForTest(t, true)()
 	if os.Getenv("GOOGLE_APPLICATION_CREDENTIALS") == "" {
 		t.Skip("Default credentials not set, skip creating Google Cloud exporter")
 	}
@@ -52,7 +51,7 @@ func TestCreateExporter(t *testing.T) {
 }
 
 func TestCreateLegacyExporter(t *testing.T) {
-	defer setPdataFeatureGateForTest(false)()
+	defer setPdataFeatureGateForTest(t, false)()
 	if os.Getenv("GOOGLE_APPLICATION_CREDENTIALS") == "" {
 		t.Skip("Default credentials not set, skip creating Google Cloud exporter")
 	}

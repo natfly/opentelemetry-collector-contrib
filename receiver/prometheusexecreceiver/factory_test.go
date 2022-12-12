@@ -23,10 +23,11 @@ import (
 	promconfig "github.com/prometheus/prometheus/config"
 	"github.com/prometheus/prometheus/discovery"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/component/componenttest"
 	"go.opentelemetry.io/collector/config"
-	"go.opentelemetry.io/collector/service/servicetest"
+	"go.opentelemetry.io/collector/confmap/confmaptest"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/prometheusexecreceiver/subprocessmanager"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/prometheusreceiver"
@@ -38,40 +39,42 @@ func TestCreateTraceAndMetricsReceiver(t *testing.T) {
 		metricReceiver component.MetricsReceiver
 	)
 
-	factories, err := componenttest.NopFactories()
-	assert.NoError(t, err)
-
+	cm, err := confmaptest.LoadConf(filepath.Join("testdata", "config.yaml"))
+	require.NoError(t, err)
 	factory := NewFactory()
-	factories.Receivers[typeStr] = factory
+	cfg := factory.CreateDefaultConfig()
 
-	cfg, err := servicetest.LoadConfigAndValidate(filepath.Join("testdata", "config.yaml"), factories)
+	sub, err := cm.Sub(component.NewID(typeStr).String())
+	require.NoError(t, err)
+	require.NoError(t, component.UnmarshalConfig(sub, cfg))
 
 	assert.NoError(t, err)
 	assert.NotNil(t, cfg)
 
-	receiver := cfg.Receivers[config.NewComponentID(typeStr)]
-
 	// Test CreateTracesReceiver
-	traceReceiver, err = factory.CreateTracesReceiver(context.Background(), componenttest.NewNopReceiverCreateSettings(), receiver, nil)
+	traceReceiver, err = factory.CreateTracesReceiver(context.Background(), componenttest.NewNopReceiverCreateSettings(), cfg, nil)
 
 	assert.Equal(t, nil, traceReceiver)
 	assert.ErrorIs(t, err, component.ErrDataTypeIsNotSupported)
 
-	// Test CreateMetricsReceiver error because of lack of command
-	_, err = factory.CreateMetricsReceiver(context.Background(), componenttest.NewNopReceiverCreateSettings(), receiver, nil)
-	assert.NotNil(t, err)
+	// Test error because of lack of command
+	assert.Error(t, component.ValidateConfig(cfg))
 
 	// Test CreateMetricsReceiver
-	receiver = cfg.Receivers[config.NewComponentIDWithName(typeStr, "test")]
-	metricReceiver, err = factory.CreateMetricsReceiver(context.Background(), componenttest.NewNopReceiverCreateSettings(), receiver, nil)
+	sub, err = cm.Sub(component.NewIDWithName(typeStr, "test").String())
+	require.NoError(t, err)
+	require.NoError(t, component.UnmarshalConfig(sub, cfg))
+	set := componenttest.NewNopReceiverCreateSettings()
+	set.ID = component.NewID(typeStr)
+	metricReceiver, err = factory.CreateMetricsReceiver(context.Background(), set, cfg, nil)
 	assert.Equal(t, nil, err)
 
 	wantPer := &prometheusExecReceiver{
-		params:   componenttest.NewNopReceiverCreateSettings(),
-		config:   receiver.(*Config),
+		params:   set,
+		config:   cfg.(*Config),
 		consumer: nil,
 		promReceiverConfig: &prometheusreceiver.Config{
-			ReceiverSettings: config.NewReceiverSettings(config.NewComponentIDWithName(typeStr, "test")),
+			ReceiverSettings: config.NewReceiverSettings(component.NewID(typeStr)),
 			PrometheusConfig: &promconfig.Config{
 				ScrapeConfigs: []*promconfig.ScrapeConfig{
 					{
@@ -79,7 +82,7 @@ func TestCreateTraceAndMetricsReceiver(t *testing.T) {
 						ScrapeTimeout:   model.Duration(defaultTimeoutInterval),
 						Scheme:          "http",
 						MetricsPath:     "/metrics",
-						JobName:         "test",
+						JobName:         typeStr,
 						HonorLabels:     false,
 						HonorTimestamps: true,
 						ServiceDiscoveryConfigs: discovery.Configs{

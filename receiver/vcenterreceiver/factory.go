@@ -38,14 +38,14 @@ func NewFactory() component.ReceiverFactory {
 	return component.NewReceiverFactory(
 		typeStr,
 		createDefaultConfig,
-		component.WithMetricsReceiverAndStabilityLevel(createMetricsReceiver, stability),
+		component.WithMetricsReceiver(createMetricsReceiver, stability),
 	)
 }
 
-func createDefaultConfig() config.Receiver {
+func createDefaultConfig() component.Config {
 	return &Config{
 		ScraperControllerSettings: scraperhelper.ScraperControllerSettings{
-			ReceiverSettings:   config.NewReceiverSettings(config.NewComponentID(typeStr)),
+			ReceiverSettings:   config.NewReceiverSettings(component.NewID(typeStr)),
 			CollectionInterval: 2 * time.Minute,
 		},
 		TLSClientSetting: configtls.TLSClientSetting{},
@@ -58,7 +58,7 @@ var errConfigNotVcenter = errors.New("config was not an vcenter receiver config"
 func createMetricsReceiver(
 	_ context.Context,
 	params component.ReceiverCreateSettings,
-	rConf config.Receiver,
+	rConf component.Config,
 	consumer consumer.Metrics,
 ) (component.MetricsReceiver, error) {
 	cfg, ok := rConf.(*Config)
@@ -66,6 +66,7 @@ func createMetricsReceiver(
 		return nil, errConfigNotVcenter
 	}
 	vr := newVmwareVcenterScraper(params.Logger, cfg, params)
+
 	scraper, err := scraperhelper.NewScraper(
 		typeStr,
 		vr.scrape,

@@ -18,7 +18,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"log"
 	"net"
 	"net/http"
@@ -41,6 +41,8 @@ type MockAwsXrayReceiver struct {
 	server *http.Server
 
 	nextConsumer consumer.Traces
+	obsrecv      *obsreport.Receiver
+	httpsObsrecv *obsreport.Receiver
 }
 
 // New creates a new awsxrayreceiver.MockAwsXrayReceiver reference.
@@ -52,10 +54,21 @@ func New(
 		return nil, component.ErrNilNextConsumer
 	}
 
+	obsrecv, err := obsreport.NewReceiver(obsreport.ReceiverSettings{ReceiverID: params.ID, Transport: "http", ReceiverCreateSettings: params})
+	if err != nil {
+		return nil, err
+	}
+	httpsObsrecv, err := obsreport.NewReceiver(obsreport.ReceiverSettings{ReceiverID: params.ID, Transport: "https", ReceiverCreateSettings: params})
+	if err != nil {
+		return nil, err
+	}
+
 	ar := &MockAwsXrayReceiver{
 		logger:       params.Logger,
 		config:       config,
 		nextConsumer: nextConsumer,
+		obsrecv:      obsrecv,
+		httpsObsrecv: httpsObsrecv,
 	}
 	return ar, nil
 }
@@ -92,14 +105,14 @@ func (ar *MockAwsXrayReceiver) Start(_ context.Context, host component.Host) err
 
 // handleRequest parses an http request containing aws json request and passes the count of the traces to next consumer
 func (ar *MockAwsXrayReceiver) handleRequest(req *http.Request) error {
-	transport := "http"
+	obsrecv := ar.obsrecv
+
 	if ar.config.TLSCredentials != nil {
-		transport = "https"
+		obsrecv = ar.httpsObsrecv
 	}
 
-	obsrecv := obsreport.NewReceiver(obsreport.ReceiverSettings{ReceiverID: ar.config.ID(), Transport: transport})
 	ctx := obsrecv.StartTracesOp(req.Context())
-	body, err := ioutil.ReadAll(req.Body)
+	body, err := io.ReadAll(req.Body)
 	if err != nil {
 		log.Fatalln(err)
 	}
@@ -113,7 +126,7 @@ func (ar *MockAwsXrayReceiver) handleRequest(req *http.Request) error {
 	traces, _ := ToTraces(body)
 	sc := traces.SpanCount()
 
-	err = ar.nextConsumer.ConsumeTraces(ctx, *traces)
+	err = ar.nextConsumer.ConsumeTraces(ctx, traces)
 	obsrecv.EndTracesOp(ctx, typeStr, sc, err)
 	return err
 }
@@ -135,11 +148,11 @@ func (ar *MockAwsXrayReceiver) Shutdown(context.Context) error {
 	return ar.server.Close()
 }
 
-func ToTraces(rawSeg []byte) (*ptrace.Traces, error) {
+func ToTraces(rawSeg []byte) (ptrace.Traces, error) {
 	var result map[string]interface{}
 	err := json.Unmarshal(rawSeg, &result)
 	if err != nil {
-		return nil, err
+		return ptrace.Traces{}, err
 	}
 
 	records, ok := result["TraceSegmentDocuments"].([]interface{})
@@ -156,5 +169,5 @@ func ToTraces(rawSeg []byte) (*ptrace.Traces, error) {
 		ils.Spans().AppendEmpty()
 	}
 
-	return &traceData, nil
+	return traceData, nil
 }

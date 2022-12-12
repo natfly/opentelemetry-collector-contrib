@@ -48,15 +48,15 @@ func NewFactory() component.ExporterFactory {
 	return component.NewExporterFactory(
 		typeStr,
 		createDefaultConfig,
-		component.WithMetricsExporterAndStabilityLevel(createMetricsExporter, stability),
-		component.WithLogsExporterAndStabilityLevel(createLogsExporter, stability),
-		component.WithTracesExporterAndStabilityLevel(createTracesExporter, stability),
+		component.WithMetricsExporter(createMetricsExporter, stability),
+		component.WithLogsExporter(createLogsExporter, stability),
+		component.WithTracesExporter(createTracesExporter, stability),
 	)
 }
 
-func createDefaultConfig() config.Exporter {
+func createDefaultConfig() component.Config {
 	return &Config{
-		ExporterSettings: config.NewExporterSettings(config.NewComponentID(typeStr)),
+		ExporterSettings: config.NewExporterSettings(component.NewID(typeStr)),
 		TimeoutSettings:  exporterhelper.TimeoutSettings{Timeout: defaultHTTPTimeout},
 		RetrySettings:    exporterhelper.NewDefaultRetrySettings(),
 		QueueSettings:    exporterhelper.NewDefaultQueueSettings(),
@@ -71,9 +71,9 @@ func createDefaultConfig() config.Exporter {
 }
 
 func createTracesExporter(
-	_ context.Context,
+	ctx context.Context,
 	set component.ExporterCreateSettings,
-	eCfg config.Exporter,
+	eCfg component.Config,
 ) (component.TracesExporter, error) {
 	cfg := eCfg.(*Config)
 	corrCfg := cfg.Correlation
@@ -92,39 +92,41 @@ func createTracesExporter(
 	tracker := correlation.NewTracker(corrCfg, cfg.AccessToken, set)
 
 	return exporterhelper.NewTracesExporter(
-		cfg,
+		ctx,
 		set,
+		cfg,
 		tracker.AddSpans,
 		exporterhelper.WithStart(tracker.Start),
 		exporterhelper.WithShutdown(tracker.Shutdown))
 }
 
 func createMetricsExporter(
-	_ context.Context,
+	ctx context.Context,
 	set component.ExporterCreateSettings,
-	config config.Exporter,
+	config component.Config,
 ) (component.MetricsExporter, error) {
 
-	expCfg := config.(*Config)
+	cfg := config.(*Config)
 
-	err := setDefaultExcludes(expCfg)
+	err := setDefaultExcludes(cfg)
 	if err != nil {
 		return nil, err
 	}
 
-	exp, err := newSignalFxExporter(expCfg, set.Logger)
+	exp, err := newSignalFxExporter(cfg, set.Logger)
 	if err != nil {
 		return nil, err
 	}
 
 	me, err := exporterhelper.NewMetricsExporter(
-		expCfg,
+		ctx,
 		set,
+		cfg,
 		exp.pushMetrics,
 		// explicitly disable since we rely on http.Client timeout logic.
 		exporterhelper.WithTimeout(exporterhelper.TimeoutSettings{Timeout: 0}),
-		exporterhelper.WithRetry(expCfg.RetrySettings),
-		exporterhelper.WithQueue(expCfg.QueueSettings))
+		exporterhelper.WithRetry(cfg.RetrySettings),
+		exporterhelper.WithQueue(cfg.QueueSettings))
 
 	if err != nil {
 		return nil, err
@@ -132,7 +134,7 @@ func createMetricsExporter(
 
 	// If AccessTokenPassthrough enabled, split the incoming Metrics data by splunk.SFxAccessTokenLabel,
 	// this ensures that we get batches of data for the same token when pushing to the backend.
-	if expCfg.AccessTokenPassthrough {
+	if cfg.AccessTokenPassthrough {
 		me = &baseMetricsExporter{
 			Component: me,
 			Metrics:   batchperresourceattr.NewBatchPerResourceMetrics(splunk.SFxAccessTokenLabel, me),
@@ -174,7 +176,7 @@ func loadConfig(bytes []byte) (Config, error) {
 		return cfg, err
 	}
 
-	if err := confmap.NewFromStringMap(data).UnmarshalExact(&cfg); err != nil {
+	if err := confmap.NewFromStringMap(data).Unmarshal(&cfg, confmap.WithErrorUnused()); err != nil {
 		return cfg, fmt.Errorf("failed to load default exclude metrics: %w", err)
 	}
 
@@ -182,9 +184,9 @@ func loadConfig(bytes []byte) (Config, error) {
 }
 
 func createLogsExporter(
-	_ context.Context,
+	ctx context.Context,
 	set component.ExporterCreateSettings,
-	cfg config.Exporter,
+	cfg component.Config,
 ) (component.LogsExporter, error) {
 	expCfg := cfg.(*Config)
 
@@ -194,8 +196,9 @@ func createLogsExporter(
 	}
 
 	le, err := exporterhelper.NewLogsExporter(
-		expCfg,
+		ctx,
 		set,
+		cfg,
 		exp.pushLogs,
 		// explicitly disable since we rely on http.Client timeout logic.
 		exporterhelper.WithTimeout(exporterhelper.TimeoutSettings{Timeout: 0}),

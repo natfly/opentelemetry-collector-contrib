@@ -26,7 +26,7 @@ const (
 	// The value of "type" key in configuration.
 	typeStr = "parquet"
 	// The stability level of the exporter.
-	stability = component.StabilityLevelInDevelopment
+	stability = component.StabilityLevelDevelopment
 )
 
 type Config struct {
@@ -39,26 +39,27 @@ func NewFactory() component.ExporterFactory {
 	return component.NewExporterFactory(
 		typeStr,
 		createDefaultConfig,
-		component.WithTracesExporterAndStabilityLevel(createTracesExporter, stability),
-		component.WithMetricsExporterAndStabilityLevel(createMetricsExporter, stability),
-		component.WithLogsExporterAndStabilityLevel(createLogsExporter, stability))
+		component.WithTracesExporter(createTracesExporter, stability),
+		component.WithMetricsExporter(createMetricsExporter, stability),
+		component.WithLogsExporter(createLogsExporter, stability))
 }
 
-func createDefaultConfig() config.Exporter {
+func createDefaultConfig() component.Config {
 	return &Config{
-		ExporterSettings: config.NewExporterSettings(config.NewComponentID(typeStr)),
+		ExporterSettings: config.NewExporterSettings(component.NewID(typeStr)),
 	}
 }
 
 func createTracesExporter(
-	_ context.Context,
+	ctx context.Context,
 	set component.ExporterCreateSettings,
-	cfg config.Exporter,
+	cfg component.Config,
 ) (component.TracesExporter, error) {
 	fe := &parquetExporter{path: cfg.(*Config).Path}
 	return exporterhelper.NewTracesExporter(
-		cfg,
+		ctx,
 		set,
+		cfg,
 		fe.consumeTraces,
 		exporterhelper.WithStart(fe.start),
 		exporterhelper.WithShutdown(fe.shutdown),
@@ -66,14 +67,15 @@ func createTracesExporter(
 }
 
 func createMetricsExporter(
-	_ context.Context,
+	ctx context.Context,
 	set component.ExporterCreateSettings,
-	cfg config.Exporter,
+	cfg component.Config,
 ) (component.MetricsExporter, error) {
 	fe := &parquetExporter{path: cfg.(*Config).Path}
 	return exporterhelper.NewMetricsExporter(
-		cfg,
+		ctx,
 		set,
+		cfg,
 		fe.consumeMetrics,
 		exporterhelper.WithStart(fe.start),
 		exporterhelper.WithShutdown(fe.shutdown),
@@ -81,14 +83,15 @@ func createMetricsExporter(
 }
 
 func createLogsExporter(
-	_ context.Context,
+	ctx context.Context,
 	set component.ExporterCreateSettings,
-	cfg config.Exporter,
+	cfg component.Config,
 ) (component.LogsExporter, error) {
 	fe := &parquetExporter{path: cfg.(*Config).Path}
 	return exporterhelper.NewLogsExporter(
-		cfg,
+		ctx,
 		set,
+		cfg,
 		fe.consumeLogs,
 		exporterhelper.WithStart(fe.start),
 		exporterhelper.WithShutdown(fe.shutdown),

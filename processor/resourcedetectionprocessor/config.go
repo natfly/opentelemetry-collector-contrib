@@ -74,8 +74,3 @@ func (d *DetectorConfig) GetConfigFromType(detectorType internal.DetectorType) i
 		return nil
 	}
 }
-
-// Validate config
-func (cfg *Config) Validate() error {
-	return cfg.DetectorConfig.SystemConfig.Validate()
-}

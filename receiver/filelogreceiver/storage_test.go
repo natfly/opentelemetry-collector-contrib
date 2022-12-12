@@ -39,17 +39,18 @@ func TestStorage(t *testing.T) {
 
 	logsDir := t.TempDir()
 	storageDir := t.TempDir()
+	extID := storagetest.NewFileBackedStorageExtension("test", storageDir).ID
 
 	f := NewFactory()
 
-	cfg := testdataRotateTestYamlAsMap(logsDir)
-	cfg.Converter.MaxFlushCount = 1
-	cfg.Converter.FlushInterval = time.Millisecond
+	cfg := rotationTestConfig(logsDir)
 	cfg.Operators = nil // not testing processing, just read the lines
+	cfg.StorageID = &extID
 
 	logger := newRecallLogger(t, logsDir)
 
-	host := storagetest.NewStorageHost(t, storageDir, "test")
+	ext := storagetest.NewFileBackedStorageExtension("test", storageDir)
+	host := storagetest.NewStorageHost().WithExtension(ext.ID, ext)
 	sink := new(consumertest.LogsSink)
 	rcvr, err := f.CreateLogsReceiver(ctx, componenttest.NewNopReceiverCreateSettings(), cfg, sink)
 	require.NoError(t, err, "failed to create receiver")
@@ -62,7 +63,7 @@ func TestStorage(t *testing.T) {
 	// Expect them now, since the receiver is running
 	require.Eventually(t,
 		expectLogs(sink, logger.recall()),
-		time.Second,
+		5*time.Second,
 		10*time.Millisecond,
 		"expected 2 but got %d logs",
 		sink.LogRecordCount(),
@@ -80,7 +81,8 @@ func TestStorage(t *testing.T) {
 	logger.log(fmt.Sprintf(baseLog, 4))
 
 	// Start the components again
-	host = storagetest.NewStorageHost(t, storageDir, "test")
+	ext = storagetest.NewFileBackedStorageExtension("test", storageDir)
+	host = storagetest.NewStorageHost().WithExtension(ext.ID, ext)
 	rcvr, err = f.CreateLogsReceiver(ctx, componenttest.NewNopReceiverCreateSettings(), cfg, sink)
 	require.NoError(t, err, "failed to create receiver")
 	require.NoError(t, rcvr.Start(ctx, host))
@@ -124,7 +126,8 @@ func TestStorage(t *testing.T) {
 	logger.log(fmt.Sprintf(baseLog, 9))
 
 	// Start the components again
-	host = storagetest.NewStorageHost(t, storageDir, "test")
+	ext = storagetest.NewFileBackedStorageExtension("test", storageDir)
+	host = storagetest.NewStorageHost().WithExtension(ext.ID, ext)
 	rcvr, err = f.CreateLogsReceiver(ctx, componenttest.NewNopReceiverCreateSettings(), cfg, sink)
 	require.NoError(t, err, "failed to create receiver")
 	require.NoError(t, rcvr.Start(ctx, host))
@@ -194,13 +197,17 @@ func expectLogs(sink *consumertest.LogsSink, expected []string) func() bool {
 		}
 
 		for _, logs := range sink.AllLogs() {
-			body := logs.ResourceLogs().
-				At(0).ScopeLogs().
-				At(0).LogRecords().
-				At(0).Body().
-				StringVal()
-
-			found[body] = true
+			rl := logs.ResourceLogs()
+			for i := 0; i < rl.Len(); i++ {
+				sl := rl.At(i).ScopeLogs()
+				for j := 0; j < sl.Len(); j++ {
+					lrs := sl.At(j).LogRecords()
+					for k := 0; k < lrs.Len(); k++ {
+						body := lrs.At(k).Body().Str()
+						found[body] = true
+					}
+				}
+			}
 		}
 
 		for _, v := range found {

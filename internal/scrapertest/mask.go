@@ -1,4 +1,4 @@
-// Copyright  The OpenTelemetry Authors
+// Copyright The OpenTelemetry Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -22,31 +22,41 @@ import (
 )
 
 // IgnoreMetricValues is a CompareOption that clears all values
-func IgnoreMetricValues() CompareOption {
-	return ignoreMetricValues{}
+func IgnoreMetricValues(metricNames ...string) CompareOption {
+	return ignoreMetricValues{
+		metricNames: metricNames,
+	}
 }
 
-type ignoreMetricValues struct{}
+type ignoreMetricValues struct {
+	metricNames []string
+}
 
 func (opt ignoreMetricValues) apply(expected, actual pmetric.Metrics) {
-	maskMetricValues(expected)
-	maskMetricValues(actual)
+	maskMetricValues(expected, opt.metricNames...)
+	maskMetricValues(actual, opt.metricNames...)
 }
 
-func maskMetricValues(metrics pmetric.Metrics) {
+func maskMetricValues(metrics pmetric.Metrics, metricNames ...string) {
 	rms := metrics.ResourceMetrics()
 	for i := 0; i < rms.Len(); i++ {
 		ilms := rms.At(i).ScopeMetrics()
 		for j := 0; j < ilms.Len(); j++ {
-			maskMetricSliceValues(ilms.At(j).Metrics())
+			maskMetricSliceValues(ilms.At(j).Metrics(), metricNames...)
 		}
 	}
 }
 
 // maskMetricSliceValues sets all data point values to zero.
-func maskMetricSliceValues(metrics pmetric.MetricSlice) {
+func maskMetricSliceValues(metrics pmetric.MetricSlice, metricNames ...string) {
+	metricNameSet := make(map[string]bool, len(metricNames))
+	for _, metricName := range metricNames {
+		metricNameSet[metricName] = true
+	}
 	for i := 0; i < metrics.Len(); i++ {
-		maskDataPointSliceValues(getDataPointSlice(metrics.At(i)))
+		if len(metricNames) == 0 || metricNameSet[metrics.At(i).Name()] {
+			maskDataPointSliceValues(getDataPointSlice(metrics.At(i)))
+		}
 	}
 }
 
@@ -54,8 +64,8 @@ func maskMetricSliceValues(metrics pmetric.MetricSlice) {
 func maskDataPointSliceValues(dataPoints pmetric.NumberDataPointSlice) {
 	for i := 0; i < dataPoints.Len(); i++ {
 		dataPoint := dataPoints.At(i)
-		dataPoint.SetIntVal(0)
-		dataPoint.SetDoubleVal(0)
+		dataPoint.SetIntValue(0)
+		dataPoint.SetDoubleValue(0)
 	}
 }
 
@@ -106,10 +116,10 @@ func maskMetricSliceAttributeValues(metrics pmetric.MetricSlice, attributeName s
 			// indistinguishable from each other, but sorting by value allows
 			// for a reasonably thorough comparison and a deterministic outcome.
 			dps.Sort(func(a, b pmetric.NumberDataPoint) bool {
-				if a.IntVal() < b.IntVal() {
+				if a.IntValue() < b.IntValue() {
 					return true
 				}
-				if a.DoubleVal() < b.DoubleVal() {
+				if a.DoubleValue() < b.DoubleValue() {
 					return true
 				}
 				return false
@@ -126,8 +136,8 @@ func maskDataPointSliceAttributeValues(dataPoints pmetric.NumberDataPointSlice, 
 		attribute, ok := attributes.Get(attributeName)
 		if ok {
 			switch attribute.Type() {
-			case pcommon.ValueTypeString:
-				attributes.UpdateString(attributeName, "")
+			case pcommon.ValueTypeStr:
+				attribute.SetStr("")
 			default:
 				panic(fmt.Sprintf("data type not supported: %s", attribute.Type()))
 			}
@@ -157,6 +167,47 @@ func maskResourceAttributeValue(metrics pmetric.Metrics, opt ignoreResourceAttri
 	for i := 0; i < rms.Len(); i++ {
 		if _, ok := rms.At(i).Resource().Attributes().Get(opt.attributeName); ok {
 			rms.At(i).Resource().Attributes().Remove(opt.attributeName)
+		}
+	}
+}
+
+// IgnoreSubsequentDataPoints is a CompareOption that ignores data points after the first
+func IgnoreSubsequentDataPoints(metricNames ...string) CompareOption {
+	return ignoreSubsequentDataPoints{
+		metricNames: metricNames,
+	}
+}
+
+type ignoreSubsequentDataPoints struct {
+	metricNames []string
+}
+
+func (opt ignoreSubsequentDataPoints) apply(expected, actual pmetric.Metrics) {
+	maskSubsequentDataPoints(expected, opt.metricNames...)
+	maskSubsequentDataPoints(actual, opt.metricNames...)
+}
+
+func maskSubsequentDataPoints(metrics pmetric.Metrics, metricNames ...string) {
+	metricNameSet := make(map[string]bool, len(metricNames))
+	for _, metricName := range metricNames {
+		metricNameSet[metricName] = true
+	}
+
+	rms := metrics.ResourceMetrics()
+	for i := 0; i < rms.Len(); i++ {
+		sms := rms.At(i).ScopeMetrics()
+		for j := 0; j < sms.Len(); j++ {
+			ms := sms.At(j).Metrics()
+			for k := 0; k < ms.Len(); k++ {
+				if len(metricNames) == 0 || metricNameSet[ms.At(k).Name()] {
+					dps := getDataPointSlice(ms.At(k))
+					n := 0
+					dps.RemoveIf(func(pmetric.NumberDataPoint) bool {
+						n++
+						return n > 1
+					})
+				}
+			}
 		}
 	}
 }

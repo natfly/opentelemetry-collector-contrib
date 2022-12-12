@@ -18,14 +18,13 @@ import (
 	"context"
 
 	"go.opentelemetry.io/collector/component"
-	"go.opentelemetry.io/collector/config"
 	"go.opentelemetry.io/collector/exporter/exporterhelper"
 	"go.opentelemetry.io/collector/pdata/plog"
 	"go.uber.org/zap"
 )
 
 // newLogsExporter return a new LogService logs exporter.
-func newLogsExporter(set component.ExporterCreateSettings, cfg config.Exporter) (component.LogsExporter, error) {
+func newLogsExporter(set component.ExporterCreateSettings, cfg component.Config) (component.LogsExporter, error) {
 
 	l := &logServiceLogsSender{
 		logger: set.Logger,
@@ -37,8 +36,9 @@ func newLogsExporter(set component.ExporterCreateSettings, cfg config.Exporter) 
 	}
 
 	return exporterhelper.NewLogsExporter(
-		cfg,
+		context.TODO(),
 		set,
+		cfg,
 		l.pushLogsData)
 }
 

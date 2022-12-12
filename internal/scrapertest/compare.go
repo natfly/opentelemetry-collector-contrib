@@ -1,4 +1,4 @@
-// Copyright  The OpenTelemetry Authors
+// Copyright The OpenTelemetry Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -29,7 +29,9 @@ type CompareOption interface {
 }
 
 func CompareMetrics(expected, actual pmetric.Metrics, options ...CompareOption) error {
-	expected, actual = expected.Clone(), actual.Clone()
+	exp, act := pmetric.NewMetrics(), pmetric.NewMetrics()
+	expected.CopyTo(exp)
+	actual.CopyTo(act)
 
 	for _, option := range options {
 		option.apply(expected, actual)
@@ -59,7 +61,7 @@ func CompareMetrics(expected, actual pmetric.Metrics, options ...CompareOption) 
 			if _, ok := matchingResources[ar]; ok {
 				continue
 			}
-			if reflect.DeepEqual(er.Resource().Attributes().Sort().AsRaw(), ar.Resource().Attributes().Sort().AsRaw()) {
+			if reflect.DeepEqual(er.Resource().Attributes().AsRaw(), ar.Resource().Attributes().AsRaw()) {
 				foundMatch = true
 				matchingResources[ar] = er
 				break
@@ -160,18 +162,18 @@ func CompareMetricSlices(expected, actual pmetric.MetricSlice) error {
 		if actualMetric.Unit() != expectedMetric.Unit() {
 			return fmt.Errorf("metric Unit does not match expected: %s, actual: %s", expectedMetric.Unit(), actualMetric.Unit())
 		}
-		if actualMetric.DataType() != expectedMetric.DataType() {
-			return fmt.Errorf("metric DataType does not match expected: %s, actual: %s", expectedMetric.DataType(), actualMetric.DataType())
+		if actualMetric.Type() != expectedMetric.Type() {
+			return fmt.Errorf("metric DataType does not match expected: %s, actual: %s", expectedMetric.Type(), actualMetric.Type())
 		}
 
 		var expectedDataPoints pmetric.NumberDataPointSlice
 		var actualDataPoints pmetric.NumberDataPointSlice
 
-		switch actualMetric.DataType() {
-		case pmetric.MetricDataTypeGauge:
+		switch actualMetric.Type() {
+		case pmetric.MetricTypeGauge:
 			expectedDataPoints = expectedMetric.Gauge().DataPoints()
 			actualDataPoints = actualMetric.Gauge().DataPoints()
-		case pmetric.MetricDataTypeSum:
+		case pmetric.MetricTypeSum:
 			if actualMetric.Sum().AggregationTemporality() != expectedMetric.Sum().AggregationTemporality() {
 				return fmt.Errorf("metric AggregationTemporality does not match expected: %s, actual: %s", expectedMetric.Sum().AggregationTemporality(), actualMetric.Sum().AggregationTemporality())
 			}
@@ -210,7 +212,7 @@ func CompareNumberDataPointSlices(expected, actual pmetric.NumberDataPointSlice)
 			if _, ok := matchingDPS[adp]; ok {
 				continue
 			}
-			if reflect.DeepEqual(edp.Attributes().Sort().AsRaw(), adp.Attributes().Sort().AsRaw()) {
+			if reflect.DeepEqual(edp.Attributes().AsRaw(), adp.Attributes().AsRaw()) {
 				foundMatch = true
 				matchingDPS[adp] = edp
 				break
@@ -246,11 +248,11 @@ func CompareNumberDataPoints(expected, actual pmetric.NumberDataPoint) error {
 	if expected.ValueType() != actual.ValueType() {
 		return fmt.Errorf("metric datapoint types don't match: expected type: %s, actual type: %s", numberTypeToString(expected.ValueType()), numberTypeToString(actual.ValueType()))
 	}
-	if expected.IntVal() != actual.IntVal() {
-		return fmt.Errorf("metric datapoint IntVal doesn't match expected: %d, actual: %d", expected.IntVal(), actual.IntVal())
+	if expected.IntValue() != actual.IntValue() {
+		return fmt.Errorf("metric datapoint IntVal doesn't match expected: %d, actual: %d", expected.IntValue(), actual.IntValue())
 	}
-	if expected.DoubleVal() != actual.DoubleVal() {
-		return fmt.Errorf("metric datapoint DoubleVal doesn't match expected: %f, actual: %f", expected.DoubleVal(), actual.DoubleVal())
+	if expected.DoubleValue() != actual.DoubleValue() {
+		return fmt.Errorf("metric datapoint DoubleVal doesn't match expected: %f, actual: %f", expected.DoubleValue(), actual.DoubleValue())
 	}
 	return nil
 }

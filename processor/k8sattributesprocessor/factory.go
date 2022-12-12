@@ -45,15 +45,15 @@ func NewFactory() component.ProcessorFactory {
 	return component.NewProcessorFactory(
 		typeStr,
 		createDefaultConfig,
-		component.WithTracesProcessorAndStabilityLevel(createTracesProcessor, stability),
-		component.WithMetricsProcessorAndStabilityLevel(createMetricsProcessor, stability),
-		component.WithLogsProcessorAndStabilityLevel(createLogsProcessor, stability),
+		component.WithTracesProcessor(createTracesProcessor, stability),
+		component.WithMetricsProcessor(createMetricsProcessor, stability),
+		component.WithLogsProcessor(createLogsProcessor, stability),
 	)
 }
 
-func createDefaultConfig() config.Processor {
+func createDefaultConfig() component.Config {
 	return &Config{
-		ProcessorSettings: config.NewProcessorSettings(config.NewComponentID(typeStr)),
+		ProcessorSettings: config.NewProcessorSettings(component.NewID(typeStr)),
 		APIConfig:         k8sconfig.APIConfig{AuthType: k8sconfig.AuthTypeServiceAccount},
 		Exclude:           defaultExcludes,
 	}
@@ -62,7 +62,7 @@ func createDefaultConfig() config.Processor {
 func createTracesProcessor(
 	ctx context.Context,
 	params component.ProcessorCreateSettings,
-	cfg config.Processor,
+	cfg component.Config,
 	next consumer.Traces,
 ) (component.TracesProcessor, error) {
 	return createTracesProcessorWithOptions(ctx, params, cfg, next)
@@ -71,7 +71,7 @@ func createTracesProcessor(
 func createLogsProcessor(
 	ctx context.Context,
 	params component.ProcessorCreateSettings,
-	cfg config.Processor,
+	cfg component.Config,
 	nextLogsConsumer consumer.Logs,
 ) (component.LogsProcessor, error) {
 	return createLogsProcessorWithOptions(ctx, params, cfg, nextLogsConsumer)
@@ -80,25 +80,27 @@ func createLogsProcessor(
 func createMetricsProcessor(
 	ctx context.Context,
 	params component.ProcessorCreateSettings,
-	cfg config.Processor,
+	cfg component.Config,
 	nextMetricsConsumer consumer.Metrics,
 ) (component.MetricsProcessor, error) {
 	return createMetricsProcessorWithOptions(ctx, params, cfg, nextMetricsConsumer)
 }
 
 func createTracesProcessorWithOptions(
-	_ context.Context,
-	params component.ProcessorCreateSettings,
-	cfg config.Processor,
+	ctx context.Context,
+	set component.ProcessorCreateSettings,
+	cfg component.Config,
 	next consumer.Traces,
 	options ...option,
 ) (component.TracesProcessor, error) {
-	kp, err := createKubernetesProcessor(params, cfg, options...)
+	kp, err := createKubernetesProcessor(set, cfg, options...)
 	if err != nil {
 		return nil, err
 	}
 
 	return processorhelper.NewTracesProcessor(
+		ctx,
+		set,
 		cfg,
 		next,
 		kp.processTraces,
@@ -108,18 +110,20 @@ func createTracesProcessorWithOptions(
 }
 
 func createMetricsProcessorWithOptions(
-	_ context.Context,
-	params component.ProcessorCreateSettings,
-	cfg config.Processor,
+	ctx context.Context,
+	set component.ProcessorCreateSettings,
+	cfg component.Config,
 	nextMetricsConsumer consumer.Metrics,
 	options ...option,
 ) (component.MetricsProcessor, error) {
-	kp, err := createKubernetesProcessor(params, cfg, options...)
+	kp, err := createKubernetesProcessor(set, cfg, options...)
 	if err != nil {
 		return nil, err
 	}
 
 	return processorhelper.NewMetricsProcessor(
+		ctx,
+		set,
 		cfg,
 		nextMetricsConsumer,
 		kp.processMetrics,
@@ -129,18 +133,20 @@ func createMetricsProcessorWithOptions(
 }
 
 func createLogsProcessorWithOptions(
-	_ context.Context,
-	params component.ProcessorCreateSettings,
-	cfg config.Processor,
+	ctx context.Context,
+	set component.ProcessorCreateSettings,
+	cfg component.Config,
 	nextLogsConsumer consumer.Logs,
 	options ...option,
 ) (component.LogsProcessor, error) {
-	kp, err := createKubernetesProcessor(params, cfg, options...)
+	kp, err := createKubernetesProcessor(set, cfg, options...)
 	if err != nil {
 		return nil, err
 	}
 
 	return processorhelper.NewLogsProcessor(
+		ctx,
+		set,
 		cfg,
 		nextLogsConsumer,
 		kp.processLogs,
@@ -151,7 +157,7 @@ func createLogsProcessorWithOptions(
 
 func createKubernetesProcessor(
 	params component.ProcessorCreateSettings,
-	cfg config.Processor,
+	cfg component.Config,
 	options ...option,
 ) (*kubernetesprocessor, error) {
 	kp := &kubernetesprocessor{logger: params.Logger}
@@ -183,9 +189,9 @@ func createKubernetesProcessor(
 	return kp, nil
 }
 
-func createProcessorOpts(cfg config.Processor) []option {
+func createProcessorOpts(cfg component.Config) []option {
 	oCfg := cfg.(*Config)
-	opts := []option{}
+	var opts []option
 	if oCfg.Passthrough {
 		opts = append(opts, withPassthrough())
 	}
@@ -209,7 +215,7 @@ func createProcessorOpts(cfg config.Processor) []option {
 	return opts
 }
 
-func warnDeprecatedMetadataConfig(logger *zap.Logger, cfg config.Processor) {
+func warnDeprecatedMetadataConfig(logger *zap.Logger, cfg component.Config) {
 	oCfg := cfg.(*Config)
 	for _, field := range oCfg.Extract.Metadata {
 		var oldName, newName string
@@ -244,7 +250,7 @@ func warnDeprecatedMetadataConfig(logger *zap.Logger, cfg config.Processor) {
 
 }
 
-func errWrongKeyConfig(cfg config.Processor) error {
+func errWrongKeyConfig(cfg component.Config) error {
 	oCfg := cfg.(*Config)
 
 	for _, r := range append(oCfg.Extract.Labels, oCfg.Extract.Annotations...) {
@@ -256,7 +262,7 @@ func errWrongKeyConfig(cfg config.Processor) error {
 	return nil
 }
 
-func warnDeprecatedPodAssociationConfig(logger *zap.Logger, cfg config.Processor) {
+func warnDeprecatedPodAssociationConfig(logger *zap.Logger, cfg component.Config) {
 	oCfg := cfg.(*Config)
 	deprecated := ""
 	actual := ""

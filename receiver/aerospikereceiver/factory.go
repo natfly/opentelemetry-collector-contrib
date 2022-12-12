@@ -39,7 +39,7 @@ func NewFactory() component.ReceiverFactory {
 	return component.NewReceiverFactory(
 		typeStr,
 		createDefaultConfig,
-		component.WithMetricsReceiverAndStabilityLevel(createMetricsReceiver, stability),
+		component.WithMetricsReceiver(createMetricsReceiver, stability),
 	)
 }
 
@@ -47,7 +47,7 @@ func NewFactory() component.ReceiverFactory {
 func createMetricsReceiver(
 	_ context.Context,
 	params component.ReceiverCreateSettings,
-	rConf config.Receiver,
+	rConf component.Config,
 	consumer consumer.Metrics,
 ) (component.MetricsReceiver, error) {
 	cfg := rConf.(*Config)
@@ -56,7 +56,12 @@ func createMetricsReceiver(
 		return nil, err
 	}
 
-	scraper, err := scraperhelper.NewScraper(typeStr, receiver.scrape)
+	scraper, err := scraperhelper.NewScraper(
+		typeStr,
+		receiver.scrape,
+		scraperhelper.WithStart(receiver.start),
+		scraperhelper.WithShutdown(receiver.shutdown),
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -67,10 +72,10 @@ func createMetricsReceiver(
 	)
 }
 
-func createDefaultConfig() config.Receiver {
+func createDefaultConfig() component.Config {
 	return &Config{
 		ScraperControllerSettings: scraperhelper.ScraperControllerSettings{
-			ReceiverSettings:   config.NewReceiverSettings(config.NewComponentID(typeStr)),
+			ReceiverSettings:   config.NewReceiverSettings(component.NewID(typeStr)),
 			CollectionInterval: time.Minute,
 		},
 		Endpoint:              defaultEndpoint,

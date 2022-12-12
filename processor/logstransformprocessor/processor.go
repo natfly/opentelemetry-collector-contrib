@@ -23,7 +23,7 @@ import (
 	"sync"
 
 	"go.opentelemetry.io/collector/component"
-	"go.opentelemetry.io/collector/config"
+	"go.opentelemetry.io/collector/extension/experimental/storage"
 	"go.opentelemetry.io/collector/pdata/plog"
 	"go.uber.org/zap"
 
@@ -40,7 +40,6 @@ type outputType struct {
 type logsTransformProcessor struct {
 	logger *zap.Logger
 	config *Config
-	id     config.ComponentID
 
 	pipe          *pipeline.DirectedPipeline
 	firstOperator operator.Operator
@@ -63,35 +62,18 @@ func (ltp *logsTransformProcessor) Shutdown(ctx context.Context) error {
 
 func (ltp *logsTransformProcessor) Start(ctx context.Context, host component.Host) error {
 	baseCfg := ltp.config.BaseConfig
-	operators, err := baseCfg.DecodeOperatorConfigs()
-	if err != nil {
-		return err
-	}
 
-	emitterOpts := []adapter.LogEmitterOption{
-		adapter.LogEmitterWithLogger(ltp.logger.Sugar()),
-	}
-	if baseCfg.Converter.MaxFlushCount > 0 {
-		emitterOpts = append(emitterOpts, adapter.LogEmitterWithMaxBatchSize(baseCfg.Converter.MaxFlushCount))
-	}
-	if baseCfg.Converter.FlushInterval > 0 {
-		emitterOpts = append(emitterOpts, adapter.LogEmitterWithFlushInterval(baseCfg.Converter.FlushInterval))
-	}
-	ltp.emitter = adapter.NewLogEmitter(emitterOpts...)
+	ltp.emitter = adapter.NewLogEmitter(ltp.logger.Sugar())
 	pipe, err := pipeline.Config{
-		Operators:     operators,
+		Operators:     baseCfg.Operators,
 		DefaultOutput: ltp.emitter,
 	}.Build(ltp.logger.Sugar())
 	if err != nil {
 		return err
 	}
 
-	storageClient, err := adapter.GetStorageClient(ctx, ltp.id, component.KindProcessor, host)
-	if err != nil {
-		return err
-	}
-
-	err = pipe.Start(adapter.GetPersister(storageClient))
+	// There is no need for this processor to use storage
+	err = pipe.Start(storage.NewNopClient())
 	if err != nil {
 		return err
 	}
@@ -104,14 +86,8 @@ func (ltp *logsTransformProcessor) Start(ctx context.Context, host component.Hos
 	ltp.firstOperator = pipelineOperators[0]
 
 	wkrCount := int(math.Max(1, float64(runtime.NumCPU())))
-	if baseCfg.Converter.WorkerCount > 0 {
-		wkrCount = baseCfg.Converter.WorkerCount
-	}
 
-	ltp.converter = adapter.NewConverter(
-		adapter.WithLogger(ltp.logger),
-		adapter.WithWorkerCount(wkrCount),
-	)
+	ltp.converter = adapter.NewConverter(ltp.logger)
 	ltp.converter.Start()
 
 	ltp.fromConverter = adapter.NewFromPdataConverter(wkrCount, ltp.logger)

@@ -32,7 +32,7 @@ const (
 	parserConfigSection = "parser"
 )
 
-var _ config.Unmarshallable = (*Config)(nil)
+var _ confmap.Unmarshaler = (*Config)(nil)
 
 // Config defines configuration for the Carbon receiver.
 type Config struct {
@@ -69,9 +69,9 @@ func (cfg *Config) Unmarshal(componentParser *confmap.Conf) error {
 	}
 
 	if err := protocol.LoadParserConfig(vParserCfg, cfg.Parser); err != nil {
-		return fmt.Errorf("error on %q section for %s: %w", parserConfigSection, cfg.ID().String(), err)
+		return fmt.Errorf("error on %q section: %w", parserConfigSection, err)
 	}
 
 	// Unmarshal exact to validate the config keys.
-	return componentParser.UnmarshalExact(cfg)
+	return componentParser.Unmarshal(cfg, confmap.WithErrorUnused())
 }

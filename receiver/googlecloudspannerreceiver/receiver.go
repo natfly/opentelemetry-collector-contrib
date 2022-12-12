@@ -1,4 +1,4 @@
-// Copyright  The OpenTelemetry Authors
+// Copyright The OpenTelemetry Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -108,8 +108,9 @@ func (r *googleCloudSpannerReceiver) initializeProjectReaders(ctx context.Contex
 	parsedMetadata []*metadata.MetricsMetadata) error {
 
 	readerConfig := statsreader.ReaderConfig{
-		BackfillEnabled:        r.config.BackfillEnabled,
-		TopMetricsQueryMaxRows: r.config.TopMetricsQueryMaxRows,
+		BackfillEnabled:                   r.config.BackfillEnabled,
+		TopMetricsQueryMaxRows:            r.config.TopMetricsQueryMaxRows,
+		HideTopnLockstatsRowrangestartkey: r.config.HideTopnLockstatsRowrangestartkey,
 	}
 
 	for _, project := range r.config.Projects {

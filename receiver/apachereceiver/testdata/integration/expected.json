@@ -12,7 +12,7 @@
                      "description": "The amount of time that the server has been running in seconds.",
                      "name": "apache.uptime",
                      "sum": {
-                        "aggregationTemporality": "AGGREGATION_TEMPORALITY_CUMULATIVE",
+                        "aggregationTemporality": 2,
                         "dataPoints": [
                            {
                               "asInt": "1",
@@ -20,7 +20,7 @@
                                  {
                                     "key": "server_name",
                                     "value": {
-                                       "stringValue": ""
+                                       "stringValue": "localhost"
                                     }
                                  }
                               ],
@@ -35,7 +35,7 @@
                      "description": "The number of active connections currently attached to the HTTP server.",
                      "name": "apache.current_connections",
                      "sum": {
-                        "aggregationTemporality": "AGGREGATION_TEMPORALITY_CUMULATIVE",
+                        "aggregationTemporality": 2,
                         "dataPoints": [
                            {
                               "asInt": "0",
@@ -43,7 +43,7 @@
                                  {
                                     "key": "server_name",
                                     "value": {
-                                       "stringValue": ""
+                                       "stringValue": "localhost"
                                     }
                                  }
                               ],
@@ -57,7 +57,7 @@
                      "description": "The number of workers currently attached to the HTTP server.",
                      "name": "apache.workers",
                      "sum": {
-                        "aggregationTemporality": "AGGREGATION_TEMPORALITY_CUMULATIVE",
+                        "aggregationTemporality": 2,
                         "dataPoints": [
                            {
                               "asInt": "74",
@@ -65,7 +65,7 @@
                                  {
                                     "key": "server_name",
                                     "value": {
-                                       "stringValue": ""
+                                       "stringValue": "localhost"
                                     }
                                  },
                                  {
@@ -83,7 +83,7 @@
                                  {
                                     "key": "server_name",
                                     "value": {
-                                       "stringValue": ""
+                                       "stringValue": "localhost"
                                     }
                                  },
                                  {
@@ -103,7 +103,7 @@
                      "description": "The number of requests serviced by the HTTP server per second.",
                      "name": "apache.requests",
                      "sum": {
-                        "aggregationTemporality": "AGGREGATION_TEMPORALITY_CUMULATIVE",
+                        "aggregationTemporality": 2,
                         "dataPoints": [
                            {
                               "asInt": "9",
@@ -111,7 +111,7 @@
                                  {
                                     "key": "server_name",
                                     "value": {
-                                       "stringValue": ""
+                                       "stringValue": "localhost"
                                     }
                                  }
                               ],
@@ -126,7 +126,7 @@
                      "description": "Total HTTP server traffic.",
                      "name": "apache.traffic",
                      "sum": {
-                        "aggregationTemporality": "AGGREGATION_TEMPORALITY_CUMULATIVE",
+                        "aggregationTemporality": 2,
                         "dataPoints": [
                            {
                               "asInt": "9216",
@@ -134,7 +134,7 @@
                                  {
                                     "key": "server_name",
                                     "value": {
-                                       "stringValue": ""
+                                       "stringValue": "localhost"
                                     }
                                  }
                               ],
@@ -146,10 +146,224 @@
                      "unit": "By"
                   },
                   {
+                     "name": "apache.cpu.time",
+                     "description": "Jiffs used by processes of given category.",
+                     "unit": "{jiff}",
+                     "sum": {
+                     "dataPoints": [
+                        {
+                           "attributes": [
+                           {
+                              "key": "server_name",
+                              "value": {
+                                 "stringValue": "localhost"
+                              }
+                           },
+                           {
+                              "key": "level",
+                              "value": {
+                                 "stringValue": "children"
+                              }
+                           },
+                           {
+                              "key": "mode",
+                              "value": {
+                                 "stringValue": "system"
+                              }
+                           }
+                           ],
+                           "timeUnixNano": "1632495518500962000",
+                           "asDouble": "0.01"
+                        },
+                        {
+                           "attributes": [
+                           {
+                              "key": "server_name",
+                              "value": {
+                                 "stringValue": "localhost"
+                              }
+                           },
+                           {
+                              "key": "level",
+                              "value": {
+                                 "stringValue": "children"
+                              }
+                           },
+                           {
+                              "key": "mode",
+                              "value": {
+                                 "stringValue": "user"
+                              }
+                           }
+                           ],
+                           "timeUnixNano": "1632495518500962000",
+                           "asDouble": "0.02"
+                        },
+                        {
+                           "attributes": [
+                           {
+                              "key": "server_name",
+                              "value": {
+                                 "stringValue": "localhost"
+                              }
+                           },
+                           {
+                              "key": "level",
+                              "value": {
+                                 "stringValue": "self"
+                              }
+                           },
+                           {
+                              "key": "mode",
+                              "value": {
+                                 "stringValue": "system"
+                              }
+                           }
+                           ],
+                           "timeUnixNano": "1632495518500962000",
+                           "asDouble": "0.03"
+                        },
+                        {
+                           "attributes": [
+                           {
+                              "key": "server_name",
+                              "value": {
+                                 "stringValue": "localhost"
+                              }
+                           },
+                           {
+                              "key": "level",
+                              "value": {
+                                 "stringValue": "self"
+                              }
+                           },
+                           {
+                              "key": "mode",
+                              "value": {
+                                 "stringValue": "user"
+                              }
+                           }
+                           ],
+                           "timeUnixNano": "1632495518500962000",
+                           "asDouble": "0.04"
+                        }
+                     ],
+                     "aggregationTemporality": 2,
+                     "isMonotonic": true
+                     }
+                  },
+                  {
+                     "name": "apache.cpu.load",
+                     "description": "Current load of the CPU.",
+                     "unit": "%",
+                     "gauge": {
+                     "dataPoints": [
+                        {
+                           "attributes": [
+                           {
+                              "key": "server_name",
+                              "value": {
+                                 "stringValue": "localhost"
+                              }
+                           }
+                           ],
+                           "timeUnixNano": "1632495518500962000",
+                           "asDouble": "0.66"
+                        }
+                     ]
+                     }
+                  },
+                  {
+                     "name": "apache.load.1",
+                     "description": "The average server load during the last minute.",
+                     "unit": "%",
+                     "gauge": {
+                     "dataPoints": [
+                        {
+                           "attributes": [
+                           {
+                              "key": "server_name",
+                              "value": {
+                                 "stringValue": "localhost"
+                              }
+                           }
+                           ],
+                           "timeUnixNano": "1632495518500962000",
+                           "asDouble": "0.9"
+                        }
+                     ]
+                     }
+                  },
+                  {
+                     "name": "apache.load.5",
+                     "description": "The average server load during the last 5 minutes.",
+                     "unit": "%",
+                     "gauge": {
+                     "dataPoints": [
+                        {
+                           "attributes": [
+                           {
+                              "key": "server_name",
+                              "value": {
+                                 "stringValue": "localhost"
+                              }
+                           }
+                           ],
+                           "timeUnixNano": "1632495518500962000",
+                           "asDouble": "0.4"
+                        }
+                     ]
+                     }
+                  },
+                  {
+                     "name": "apache.load.15",
+                     "description": "The average server load during the last 15 minutes.",
+                     "unit": "%",
+                     "gauge": {
+                     "dataPoints": [
+                        {
+                           "attributes": [
+                           {
+                              "key": "server_name",
+                              "value": {
+                                 "stringValue": "localhost"
+                              }
+                           }
+                           ],
+                           "timeUnixNano": "1632495518500962000",
+                           "asDouble": "0.3"
+                        }
+                     ]
+                     }
+                  },
+                  {
+                     "name": "apache.request.time",
+                     "description": "Total time spent on handling requests.",
+                     "unit": "ms",
+                     "sum": {
+                     "dataPoints": [
+                        {
+                           "attributes": [
+                           {
+                              "key": "server_name",
+                              "value": {
+                                 "stringValue": "localhost"
+                              }
+                           }
+                           ],
+                           "timeUnixNano": "1632495518500962000",
+                           "asInt": "1501"
+                        }
+                     ],
+                     "aggregationTemporality": 2,
+                     "isMonotonic": true
+                     }
+                  },
+                  {
                      "description": "The number of workers in each state.",
                      "name": "apache.scoreboard",
                      "sum": {
-                        "aggregationTemporality": "AGGREGATION_TEMPORALITY_CUMULATIVE",
+                        "aggregationTemporality": 2,
                         "dataPoints": [
                            {
                               "asInt": "74",
@@ -157,7 +371,7 @@
                                  {
                                     "key": "server_name",
                                     "value": {
-                                       "stringValue": ""
+                                       "stringValue": "localhost"
                                     }
                                  },
                                  {
@@ -175,7 +389,7 @@
                                  {
                                     "key": "server_name",
                                     "value": {
-                                       "stringValue": ""
+                                       "stringValue": "localhost"
                                     }
                                  },
                                  {
@@ -193,7 +407,7 @@
                                  {
                                     "key": "server_name",
                                     "value": {
-                                       "stringValue": ""
+                                       "stringValue": "localhost"
                                     }
                                  },
                                  {
@@ -211,7 +425,7 @@
                                  {
                                     "key": "server_name",
                                     "value": {
-                                       "stringValue": ""
+                                       "stringValue": "localhost"
                                     }
                                  },
                                  {
@@ -229,7 +443,7 @@
                                  {
                                     "key": "server_name",
                                     "value": {
-                                       "stringValue": ""
+                                       "stringValue": "localhost"
                                     }
                                  },
                                  {
@@ -247,7 +461,7 @@
                                  {
                                     "key": "server_name",
                                     "value": {
-                                       "stringValue": ""
+                                       "stringValue": "localhost"
                                     }
                                  },
                                  {
@@ -265,7 +479,7 @@
                                  {
                                     "key": "server_name",
                                     "value": {
-                                       "stringValue": ""
+                                       "stringValue": "localhost"
                                     }
                                  },
                                  {
@@ -283,7 +497,7 @@
                                  {
                                     "key": "server_name",
                                     "value": {
-                                       "stringValue": ""
+                                       "stringValue": "localhost"
                                     }
                                  },
                                  {
@@ -301,7 +515,7 @@
                                  {
                                     "key": "server_name",
                                     "value": {
-                                       "stringValue": ""
+                                       "stringValue": "localhost"
                                     }
                                  },
                                  {
@@ -319,7 +533,7 @@
                                  {
                                     "key": "server_name",
                                     "value": {
-                                       "stringValue": ""
+                                       "stringValue": "localhost"
                                     }
                                  },
                                  {
@@ -337,7 +551,7 @@
                                  {
                                     "key": "server_name",
                                     "value": {
-                                       "stringValue": ""
+                                       "stringValue": "localhost"
                                     }
                                  },
                                  {

@@ -1,4 +1,4 @@
-// Copyright  The OpenTelemetry Authors
+// Copyright The OpenTelemetry Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,7 +19,6 @@ import (
 	"time"
 
 	"go.opentelemetry.io/collector/component"
-	"go.opentelemetry.io/collector/config"
 	"go.opentelemetry.io/collector/config/confighttp"
 	"go.opentelemetry.io/collector/consumer"
 	"go.opentelemetry.io/collector/receiver/scraperhelper"
@@ -39,13 +38,13 @@ func NewFactory() component.ReceiverFactory {
 	return component.NewReceiverFactory(
 		typeStr,
 		newDefaultConfig,
-		component.WithMetricsReceiverAndStabilityLevel(newMetricsReceiver, stability))
+		component.WithMetricsReceiver(newMetricsReceiver, stability))
 }
 
 func newMetricsReceiver(
 	_ context.Context,
 	set component.ReceiverCreateSettings,
-	rCfg config.Receiver,
+	rCfg component.Config,
 	consumer consumer.Metrics,
 ) (component.MetricsReceiver, error) {
 	cfg := rCfg.(*Config)
@@ -68,7 +67,7 @@ func newMetricsReceiver(
 	)
 }
 
-func newDefaultConfig() config.Receiver {
+func newDefaultConfig() component.Config {
 	return &Config{
 		ScraperControllerSettings: scraperhelper.NewDefaultScraperControllerSettings(typeStr),
 		HTTPClientSettings: confighttp.HTTPClientSettings{

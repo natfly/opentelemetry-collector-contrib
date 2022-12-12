@@ -21,30 +21,29 @@ import (
 	"sync"
 	"time"
 
+	"github.com/DataDog/datadog-agent/pkg/otlp/model/source"
 	"github.com/DataDog/datadog-agent/pkg/trace/agent"
 	traceconfig "github.com/DataDog/datadog-agent/pkg/trace/config"
 	tracelog "github.com/DataDog/datadog-agent/pkg/trace/log"
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/consumer"
+	"go.opentelemetry.io/collector/featuregate"
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/ptrace"
-	"go.opentelemetry.io/collector/service/featuregate"
 	"go.uber.org/zap"
-	"gopkg.in/zorkian/go-datadog-api.v2"
+	zorkian "gopkg.in/zorkian/go-datadog-api.v2"
 
-	"github.com/DataDog/datadog-agent/pkg/otlp/model/source"
-
+	"github.com/open-telemetry/opentelemetry-collector-contrib/exporter/datadogexporter/internal/clientutil"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/exporter/datadogexporter/internal/metadata"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/exporter/datadogexporter/internal/metrics"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/exporter/datadogexporter/internal/scrub"
-	"github.com/open-telemetry/opentelemetry-collector-contrib/exporter/datadogexporter/internal/utils"
 )
 
 type traceExporter struct {
 	params         component.ExporterCreateSettings
 	cfg            *Config
 	ctx            context.Context // ctx triggers shutdown upon cancellation
-	client         *datadog.Client // client sends runnimg metrics to backend & performs API validation
+	client         *zorkian.Client // client sends runnimg metrics to backend & performs API validation
 	scrubber       scrub.Scrubber  // scrubber scrubs sensitive information from error messages
 	onceMetadata   *sync.Once      // onceMetadata ensures that metadata is sent only once across all exporters
 	wg             sync.WaitGroup  // wg waits for graceful shutdown
@@ -54,12 +53,11 @@ type traceExporter struct {
 
 func newTracesExporter(ctx context.Context, params component.ExporterCreateSettings, cfg *Config, onceMetadata *sync.Once, sourceProvider source.Provider) (*traceExporter, error) {
 	// client to send running metric to the backend & perform API key validation
-	client := utils.CreateClient(cfg.API.Key, cfg.Metrics.TCPAddr.Endpoint)
-	if err := utils.ValidateAPIKey(params.Logger, client); err != nil && cfg.API.FailOnInvalidKey {
+	client := clientutil.CreateZorkianClient(cfg.API.Key, cfg.Metrics.TCPAddr.Endpoint)
+	if err := clientutil.ValidateAPIKeyZorkian(params.Logger, client); err != nil && cfg.API.FailOnInvalidKey {
 		return nil, err
 	}
 	acfg := traceconfig.New()
-	acfg.AgentVersion = fmt.Sprintf("datadogexporter-%s-%s", params.BuildInfo.Command, params.BuildInfo.Version)
 	src, err := sourceProvider.Source(ctx)
 	if err != nil {
 		return nil, err
@@ -73,6 +71,7 @@ func newTracesExporter(ctx context.Context, params component.ExporterCreateSetti
 	acfg.Endpoints[0].APIKey = cfg.API.Key
 	acfg.Ignore["resource"] = cfg.Traces.IgnoreResources
 	acfg.ReceiverPort = 0 // disable HTTP receiver
+	acfg.AgentVersion = fmt.Sprintf("datadogexporter-%s-%s", params.BuildInfo.Command, params.BuildInfo.Version)
 	if v := cfg.Traces.flushInterval; v > 0 {
 		acfg.TraceWriter.FlushPeriodSeconds = v
 	}
@@ -123,7 +122,7 @@ func (exp *traceExporter) consumeTraces(
 	now := pcommon.NewTimestampFromTime(time.Now())
 	for i := 0; i < rspans.Len(); i++ {
 		rspan := rspans.At(i)
-		src := exp.agent.OTLPReceiver.ReceiveResourceSpans(rspan, http.Header{}, "otlp-exporter")
+		src := exp.agent.OTLPReceiver.ReceiveResourceSpans(ctx, rspan, http.Header{}, "otlp-exporter")
 		switch src.Kind {
 		case source.HostnameKind:
 			hosts[src.Identifier] = struct{}{}
@@ -131,12 +130,12 @@ func (exp *traceExporter) consumeTraces(
 			tags[src.Tag()] = struct{}{}
 		}
 	}
-	series := make([]datadog.Metric, 0, len(hosts)+len(tags))
+	series := make([]zorkian.Metric, 0, len(hosts)+len(tags))
 	for host := range hosts {
-		series = append(series, metrics.DefaultMetrics("traces", host, uint64(now), exp.params.BuildInfo)...)
+		series = append(series, metrics.DefaultZorkianMetrics("traces", host, uint64(now), exp.params.BuildInfo)...)
 	}
 	for tag := range tags {
-		ms := metrics.DefaultMetrics("traces", "", uint64(now), exp.params.BuildInfo)
+		ms := metrics.DefaultZorkianMetrics("traces", "", uint64(now), exp.params.BuildInfo)
 		for i := range ms {
 			ms[i].Tags = append(ms[i].Tags, tag)
 		}

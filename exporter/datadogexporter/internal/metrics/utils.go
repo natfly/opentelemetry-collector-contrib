@@ -16,59 +16,57 @@ package metrics // import "github.com/open-telemetry/opentelemetry-collector-con
 
 import (
 	"fmt"
-	"strings"
 
 	"go.opentelemetry.io/collector/component"
-	"gopkg.in/zorkian/go-datadog-api.v2"
+	zorkian "gopkg.in/zorkian/go-datadog-api.v2"
 )
 
-type MetricDataType string
+type MetricType string
 
 const (
 	// Gauge is the Datadog Gauge metric type
-	Gauge MetricDataType = "gauge"
+	Gauge MetricType = "gauge"
 	// Count is the Datadog Count metric type
-	Count               MetricDataType = "count"
-	otelNamespacePrefix string         = "otel"
+	Count MetricType = "count"
 )
 
-// newMetric creates a new Datadog metric given a name, a Unix nanoseconds timestamp
+// newZorkianMetric creates a new Zorkian Datadog metric given a name, a Unix nanoseconds timestamp
 // a value and a slice of tags
-func newMetric(name string, ts uint64, value float64, tags []string) datadog.Metric {
+func newZorkianMetric(name string, ts uint64, value float64, tags []string) zorkian.Metric {
 	// Transform UnixNano timestamp into Unix timestamp
 	// 1 second = 1e9 ns
 	timestamp := float64(ts / 1e9)
 
-	metric := datadog.Metric{
-		Points: []datadog.DataPoint{[2]*float64{&timestamp, &value}},
+	metric := zorkian.Metric{
+		Points: []zorkian.DataPoint{[2]*float64{&timestamp, &value}},
 		Tags:   tags,
 	}
 	metric.SetMetric(name)
 	return metric
 }
 
-// NewMetric creates a new Datadog metric given a name, a type, a Unix nanoseconds timestamp
+// NewZorkianMetric creates a new Zorkian Datadog metric given a name, a type, a Unix nanoseconds timestamp
 // a value and a slice of tags
-func NewMetric(name string, dt MetricDataType, ts uint64, value float64, tags []string) datadog.Metric {
-	metric := newMetric(name, ts, value, tags)
+func NewZorkianMetric(name string, dt MetricType, ts uint64, value float64, tags []string) zorkian.Metric {
+	metric := newZorkianMetric(name, ts, value, tags)
 	metric.SetType(string(dt))
 	return metric
 }
 
-// NewGauge creates a new Datadog Gauge metric given a name, a Unix nanoseconds timestamp
+// NewZorkianGauge creates a new Datadog Gauge metric given a name, a Unix nanoseconds timestamp
 // a value and a slice of tags
-func NewGauge(name string, ts uint64, value float64, tags []string) datadog.Metric {
-	return NewMetric(name, Gauge, ts, value, tags)
+func NewZorkianGauge(name string, ts uint64, value float64, tags []string) zorkian.Metric {
+	return NewZorkianMetric(name, Gauge, ts, value, tags)
 }
 
-// NewCount creates a new Datadog count metric given a name, a Unix nanoseconds timestamp
+// NewZorkianCount creates a new Datadog count metric given a name, a Unix nanoseconds timestamp
 // a value and a slice of tags
-func NewCount(name string, ts uint64, value float64, tags []string) datadog.Metric {
-	return NewMetric(name, Count, ts, value, tags)
+func NewZorkianCount(name string, ts uint64, value float64, tags []string) zorkian.Metric {
+	return NewZorkianMetric(name, Count, ts, value, tags)
 }
 
-// DefaultMetrics creates built-in metrics to report that an exporter is running
-func DefaultMetrics(exporterType string, hostname string, timestamp uint64, buildInfo component.BuildInfo) []datadog.Metric {
+// DefaultZorkianMetrics creates built-in metrics to report that an exporter is running
+func DefaultZorkianMetrics(exporterType string, hostname string, timestamp uint64, buildInfo component.BuildInfo) []zorkian.Metric {
 	var tags []string
 
 	if buildInfo.Version != "" {
@@ -79,8 +77,8 @@ func DefaultMetrics(exporterType string, hostname string, timestamp uint64, buil
 		tags = append(tags, "command:"+buildInfo.Command)
 	}
 
-	metrics := []datadog.Metric{
-		NewGauge(fmt.Sprintf("otel.datadog_exporter.%s.running", exporterType), timestamp, 1.0, tags),
+	metrics := []zorkian.Metric{
+		NewZorkianGauge(fmt.Sprintf("otel.datadog_exporter.%s.running", exporterType), timestamp, 1.0, tags),
 	}
 
 	for i := range metrics {
@@ -88,35 +86,4 @@ func DefaultMetrics(exporterType string, hostname string, timestamp uint64, buil
 	}
 
 	return metrics
-}
-
-// ProcessMetrics adds the hostname to the metric and prefixes it with the "otel"
-// namespace as the Datadog backend expects
-func ProcessMetrics(ms []datadog.Metric) {
-	addNamespace(ms, otelNamespacePrefix)
-}
-
-// shouldPrepend decides if a given metric name should be prepended by `otel.`.
-// By default, this happens for
-// - hostmetrics receiver metrics (since they clash with Datadog Agent system check) and
-// - running metrics
-func shouldPrepend(name string) bool {
-	namespaces := [...]string{"system.", "process."}
-	for _, ns := range namespaces {
-		if strings.HasPrefix(name, ns) {
-			return true
-		}
-	}
-	return false
-}
-
-// addNamespace prepends some metric names with a given namespace.
-// This is used to namespace metrics that clash with the Datadog Agent
-func addNamespace(metrics []datadog.Metric, namespace string) {
-	for i := range metrics {
-		if shouldPrepend(*metrics[i].Metric) {
-			newName := namespace + "." + *metrics[i].Metric
-			metrics[i].Metric = &newName
-		}
-	}
 }

@@ -33,20 +33,20 @@ func NewFactory() component.ExporterFactory {
 	return component.NewExporterFactory(
 		typeStr,
 		createDefaultConfig,
-		component.WithTracesExporterAndStabilityLevel(createTracesExporter, stability),
+		component.WithTracesExporter(createTracesExporter, stability),
 	)
 }
 
-func createDefaultConfig() config.Exporter {
+func createDefaultConfig() component.Config {
 	return &Config{
-		ExporterSettings: config.NewExporterSettings(config.NewComponentID(typeStr)),
+		ExporterSettings: config.NewExporterSettings(component.NewID(typeStr)),
 	}
 }
 
 func createTracesExporter(
 	_ context.Context,
 	params component.ExporterCreateSettings,
-	config config.Exporter,
+	config component.Config,
 ) (component.TracesExporter, error) {
 	sentryConfig, ok := config.(*Config)
 	if !ok {

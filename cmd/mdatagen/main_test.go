@@ -15,7 +15,7 @@
 package main
 
 import (
-	"io/ioutil"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -27,14 +27,16 @@ const (
 name: metricreceiver
 attributes:
   cpu_type:
-    value: type
+    name_override: type
     description: The type of CPU consumption
+    type: string
     enum:
     - user
     - io_wait
     - system
   host:
     description: The type of CPU consumption
+    type: string
 metrics:
   system.cpu.time:
     enabled: true
@@ -50,33 +52,21 @@ metrics:
 
 func Test_runContents(t *testing.T) {
 	type args struct {
-		yml       string
-		useExpGen bool
+		yml string
 	}
 	tests := []struct {
-		name                  string
-		args                  args
-		expectedDocumentation string
-		want                  string
-		wantErr               string
+		name    string
+		args    args
+		wantErr bool
 	}{
 		{
-			name:                  "valid metadata",
-			args:                  args{validMetadata, false},
-			expectedDocumentation: "testdata/documentation_v1.md",
-			want:                  "",
-		},
-		{
-			name:                  "valid metadata v2",
-			args:                  args{validMetadata, true},
-			expectedDocumentation: "testdata/documentation_v2.md",
-			want:                  "",
+			name: "valid metadata",
+			args: args{validMetadata},
 		},
 		{
 			name:    "invalid yaml",
-			args:    args{"invalid", false},
-			want:    "",
-			wantErr: "cannot unmarshal",
+			args:    args{"invalid"},
+			wantErr: true,
 		},
 	}
 	for _, tt := range tests {
@@ -84,33 +74,17 @@ func Test_runContents(t *testing.T) {
 			tmpdir := t.TempDir()
 
 			metadataFile := filepath.Join(tmpdir, "metadata.yaml")
-			require.NoError(t, ioutil.WriteFile(metadataFile, []byte(tt.args.yml), 0600))
+			require.NoError(t, os.WriteFile(metadataFile, []byte(tt.args.yml), 0600))
 
-			err := run(metadataFile, tt.args.useExpGen)
-
-			if tt.wantErr != "" {
-				require.Regexp(t, tt.wantErr, err)
-			} else {
-				require.NoError(t, err)
-
-				genFilePath := filepath.Join(tmpdir, "internal/metadata/generated_metrics.go")
-				if tt.args.useExpGen {
-					genFilePath = filepath.Join(tmpdir, "internal/metadata/generated_metrics_v2.go")
-				}
-				require.FileExists(t, genFilePath)
-
-				actualDocumentation := filepath.Join(tmpdir, "documentation.md")
-				require.FileExists(t, actualDocumentation)
-				if tt.expectedDocumentation != "" {
-					expectedFileBytes, err := ioutil.ReadFile(tt.expectedDocumentation)
-					require.NoError(t, err)
-
-					actualFileBytes, err := ioutil.ReadFile(actualDocumentation)
-					require.NoError(t, err)
-
-					require.Equal(t, expectedFileBytes, actualFileBytes)
-				}
+			err := run(metadataFile)
+			if tt.wantErr {
+				require.Error(t, err)
+				return
 			}
+			require.NoError(t, err)
+
+			require.FileExists(t, filepath.Join(tmpdir, "internal/metadata/generated_metrics.go"))
+			require.FileExists(t, filepath.Join(tmpdir, "documentation.md"))
 		})
 	}
 }
@@ -137,7 +111,7 @@ func Test_run(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if err := run(tt.args.ymlPath, false); (err != nil) != tt.wantErr {
+			if err := run(tt.args.ymlPath); (err != nil) != tt.wantErr {
 				t.Errorf("run() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})

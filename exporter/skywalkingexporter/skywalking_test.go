@@ -24,6 +24,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/component/componenttest"
 	"go.opentelemetry.io/collector/config"
 	"go.opentelemetry.io/collector/config/configgrpc"
@@ -42,7 +43,7 @@ func TestSwExporter(t *testing.T) {
 	server, addr, handler := initializeGRPCTestServer(t, grpc.MaxConcurrentStreams(10))
 	tt := &Config{
 		NumStreams:       10,
-		ExporterSettings: config.NewExporterSettings(config.NewComponentID(typeStr)),
+		ExporterSettings: config.NewExporterSettings(component.NewID(typeStr)),
 		GRPCClientSettings: configgrpc.GRPCClientSettings{
 			Endpoint: addr.String(),
 			TLSSetting: configtls.TLSClientSetting{
@@ -53,8 +54,9 @@ func TestSwExporter(t *testing.T) {
 
 	oce := newLogsExporter(context.Background(), tt, componenttest.NewNopTelemetrySettings())
 	got, err := exporterhelper.NewLogsExporter(
-		tt,
+		context.Background(),
 		componenttest.NewNopExporterCreateSettings(),
+		tt,
 		oce.pushLogs,
 		exporterhelper.WithCapabilities(consumer.Capabilities{MutatesData: false}),
 		exporterhelper.WithRetry(tt.RetrySettings),
@@ -81,13 +83,13 @@ func TestSwExporter(t *testing.T) {
 		go func() {
 			defer w1.Done()
 			l := testdata.GenerateLogsOneLogRecordNoResource()
-			l.ResourceLogs().At(0).ScopeLogs().At(0).LogRecords().At(0).Body().SetIntVal(0)
+			l.ResourceLogs().At(0).ScopeLogs().At(0).LogRecords().At(0).Body().SetInt(0)
 			e := got.ConsumeLogs(context.Background(), l)
 			assert.NoError(t, e)
 		}()
 	}
 	w1.Wait()
-	logs := make([]*logpb.LogData, 0)
+	var logs []*logpb.LogData
 	for i := 0; i < 200; i++ {
 		logs = append(logs, <-handler.logChan)
 	}
@@ -102,7 +104,7 @@ func TestSwExporter(t *testing.T) {
 		go func() {
 			defer w2.Done()
 			l := testdata.GenerateLogsOneLogRecordNoResource()
-			l.ResourceLogs().At(0).ScopeLogs().At(0).LogRecords().At(0).Body().SetIntVal(0)
+			l.ResourceLogs().At(0).ScopeLogs().At(0).LogRecords().At(0).Body().SetInt(0)
 			e := got.ConsumeLogs(context.Background(), l)
 			if e != nil {
 				return
@@ -115,7 +117,7 @@ func TestSwExporter(t *testing.T) {
 	server, addr, handler2 := initializeGRPCTestServerMetric(t, grpc.MaxConcurrentStreams(10))
 	tt = &Config{
 		NumStreams:       10,
-		ExporterSettings: config.NewExporterSettings(config.NewComponentID(typeStr)),
+		ExporterSettings: config.NewExporterSettings(component.NewID(typeStr)),
 		GRPCClientSettings: configgrpc.GRPCClientSettings{
 			Endpoint: addr.String(),
 			TLSSetting: configtls.TLSClientSetting{
@@ -126,8 +128,9 @@ func TestSwExporter(t *testing.T) {
 
 	oce = newMetricsExporter(context.Background(), tt, componenttest.NewNopTelemetrySettings())
 	got2, err2 := exporterhelper.NewMetricsExporter(
-		tt,
+		context.Background(),
 		componenttest.NewNopExporterCreateSettings(),
+		tt,
 		oce.pushMetrics,
 		exporterhelper.WithCapabilities(consumer.Capabilities{MutatesData: false}),
 		exporterhelper.WithRetry(tt.RetrySettings),
@@ -158,7 +161,7 @@ func TestSwExporter(t *testing.T) {
 		}()
 	}
 	w1.Wait()
-	metrics := make([]*metricpb.MeterDataCollection, 0)
+	var metrics []*metricpb.MeterDataCollection
 	for i := 0; i < 200; i++ {
 		metrics = append(metrics, <-handler2.metricChan)
 	}

@@ -19,7 +19,8 @@ import (
 
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/config"
-	"go.opentelemetry.io/collector/config/confignet"
+	"go.opentelemetry.io/collector/config/confighttp"
+	"go.opentelemetry.io/collector/extension"
 )
 
 const (
@@ -32,17 +33,19 @@ const (
 )
 
 // NewFactory creates a factory for HealthCheck extension.
-func NewFactory() component.ExtensionFactory {
-	return component.NewExtensionFactory(
+func NewFactory() extension.Factory {
+	return extension.NewFactory(
 		typeStr,
 		createDefaultConfig,
-		createExtension)
+		createExtension,
+		component.StabilityLevelBeta,
+	)
 }
 
-func createDefaultConfig() config.Extension {
+func createDefaultConfig() component.Config {
 	return &Config{
-		ExtensionSettings: config.NewExtensionSettings(config.NewComponentID(typeStr)),
-		TCPAddr: confignet.TCPAddr{
+		ExtensionSettings: config.NewExtensionSettings(component.NewID(typeStr)),
+		HTTPServerSettings: confighttp.HTTPServerSettings{
 			Endpoint: defaultEndpoint,
 		},
 		CheckCollectorPipeline: defaultCheckCollectorPipelineSettings(),
@@ -50,10 +53,10 @@ func createDefaultConfig() config.Extension {
 	}
 }
 
-func createExtension(_ context.Context, set component.ExtensionCreateSettings, cfg config.Extension) (component.Extension, error) {
+func createExtension(_ context.Context, set extension.CreateSettings, cfg component.Config) (extension.Extension, error) {
 	config := cfg.(*Config)
 
-	return newServer(*config, set.Logger), nil
+	return newServer(*config, set.TelemetrySettings), nil
 }
 
 // defaultCheckCollectorPipelineSettings returns the default settings for CheckCollectorPipeline.

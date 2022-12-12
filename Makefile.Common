@@ -3,10 +3,10 @@ SRC_ROOT := $(realpath $(dir $(lastword $(MAKEFILE_LIST))))
 
 # build tags required by any component should be defined as an independent variables and later added to GO_BUILD_TAGS below
 GO_BUILD_TAGS=""
-GOTEST_OPT?= -race -v -timeout 300s --tags=$(GO_BUILD_TAGS)
+GOTEST_OPT?= -race -timeout 300s --tags=$(GO_BUILD_TAGS)
 GOTEST_INTEGRATION_OPT?= -race -timeout 360s
 GOTEST_OPT_WITH_COVERAGE = $(GOTEST_OPT) -coverprofile=coverage.txt -covermode=atomic
-GOTEST_OPT_WITH_INTEGRATION=$(GOTEST_INTEGRATION_OPT) -v -tags=integration,$(GO_BUILD_TAGS) -run=Integration -coverprofile=integration-coverage.txt -covermode=atomic
+GOTEST_OPT_WITH_INTEGRATION=$(GOTEST_INTEGRATION_OPT) -tags=integration,$(GO_BUILD_TAGS) -run=Integration -coverprofile=integration-coverage.txt -covermode=atomic
 GOCMD?= go
 GOTEST=$(GOCMD) test
 GOOS=$(shell $(GOCMD) env GOOS)
@@ -19,11 +19,13 @@ LINT=golangci-lint
 IMPI=impi
 # BUILD_TYPE should be one of (dev, release).
 BUILD_TYPE?=release
+RUNNING_ON_GITHUB_ACTION=$(GITHUB_ACTIONS)
 
 ALL_PKG_DIRS := $(shell $(GOCMD) list -f '{{ .Dir }}' ./... | sort)
 
 ALL_SRC := $(shell find $(ALL_PKG_DIRS) -name '*.go' \
                                 -not -path '*/third_party/*' \
+                                -not -path '*/local/*' \
                                 -type f | sort)
 
 # All source code and documents. Used in spell check.
@@ -53,18 +55,30 @@ common: checklicense impi lint misspell
 
 .PHONY: test
 test:
-	$(GOTEST) $(GOTEST_OPT) ./...
-
+	if [ "$(RUNNING_ON_GITHUB_ACTION)" = "true" ]; then \
+		$(GOTEST) $(GOTEST_OPT) ./... -json > ./foresight-test-report.json; \
+	else \
+		$(GOTEST) $(GOTEST_OPT) ./...; \
+	fi
+	
 .PHONY: do-unit-tests-with-cover
 do-unit-tests-with-cover:
 	@echo "running $(GOCMD) unit test ./... + coverage in `pwd`"
-	@$(GOTEST) $(GOTEST_OPT_WITH_COVERAGE) ./...
+	@if [ "$(RUNNING_ON_GITHUB_ACTION)" = "true" ]; then \
+		$(GOTEST) $(GOTEST_OPT_WITH_COVERAGE) ./... -json > ./foresight-test-report-unit-tests-with-cover.json; \
+	else \
+		$(GOTEST) $(GOTEST_OPT_WITH_COVERAGE) ./...; \
+	fi
 	$(GOCMD) tool cover -html=coverage.txt -o coverage.html
 
 .PHONY: do-integration-tests-with-cover
 do-integration-tests-with-cover:
 	@echo "running $(GOCMD) integration test ./... + coverage in `pwd`"
-	@$(GOTEST) $(GOTEST_OPT_WITH_INTEGRATION) ./...
+	@if [ "$(RUNNING_ON_GITHUB_ACTION)" = "true" ]; then \
+		$(GOTEST) $(GOTEST_OPT_WITH_INTEGRATION) ./... -json > ./foresight-test-report-integration-tests-with-cover.json; \
+	else \
+		$(GOTEST) $(GOTEST_OPT_WITH_INTEGRATION) ./...; \
+	fi
 	@if [ -e integration-coverage.txt ]; then \
   		$(GOCMD) tool cover -html=integration-coverage.txt -o integration-coverage.html; \
   	fi
@@ -108,13 +122,13 @@ fmt:
 	goimports -w  -local github.com/open-telemetry/opentelemetry-collector-contrib ./
 
 .PHONY: lint
-lint: checklicense impi misspell
+lint: checklicense misspell
 	$(LINT) run --allow-parallel-runners
 
 .PHONY: tidy
 tidy:
 	rm -fr go.sum
-	$(GOCMD) mod tidy -compat=1.17
+	$(GOCMD) mod tidy -compat=1.18
 
 .PHONY: misspell
 misspell:
@@ -127,7 +141,7 @@ misspell-correction:
 
 .PHONY: impi
 impi:
-	@$(IMPI) --local github.com/open-telemetry/opentelemetry-collector-contrib --scheme stdThirdPartyLocal $(ALL_PKGS)
+	@$(IMPI) --local github.com/open-telemetry/opentelemetry-collector-contrib --scheme stdThirdPartyLocal ./...
 
 .PHONY: moddownload
 moddownload:

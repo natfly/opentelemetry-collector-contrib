@@ -64,14 +64,16 @@ func newZookeeperMetricsScraper(settings component.ReceiverCreateSettings, confi
 		return nil, errors.New("timeout must be a positive duration")
 	}
 
-	return &zookeeperMetricsScraper{
+	z := &zookeeperMetricsScraper{
 		logger:                settings.Logger,
 		config:                config,
 		mb:                    metadata.NewMetricsBuilder(config.Metrics, settings.BuildInfo),
 		closeConnection:       closeConnection,
 		setConnectionDeadline: setConnectionDeadline,
 		sendCmd:               sendCmd,
-	}, nil
+	}
+
+	return z, nil
 }
 
 func (z *zookeeperMetricsScraper) shutdown(_ context.Context) error {

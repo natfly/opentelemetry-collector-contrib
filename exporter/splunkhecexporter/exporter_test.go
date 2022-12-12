@@ -15,9 +15,11 @@
 package splunkhecexporter
 
 import (
+	"bytes"
+	"compress/gzip"
 	"context"
 	"encoding/json"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -26,10 +28,6 @@ import (
 	"testing"
 	"time"
 
-	commonpb "github.com/census-instrumentation/opencensus-proto/gen-go/agent/common/v1"
-	agentmetricspb "github.com/census-instrumentation/opencensus-proto/gen-go/agent/metrics/v1"
-	metricspb "github.com/census-instrumentation/opencensus-proto/gen-go/metrics/v1"
-	resourcepb "github.com/census-instrumentation/opencensus-proto/gen-go/resource/v1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/collector/component"
@@ -38,13 +36,11 @@ import (
 	"go.opentelemetry.io/collector/exporter/exporterhelper"
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/plog"
-	conventions "go.opentelemetry.io/collector/semconv/v1.6.1"
+	"go.opentelemetry.io/collector/pdata/pmetric"
+	conventions "go.opentelemetry.io/collector/semconv/v1.9.0"
 	"go.uber.org/zap"
-	"google.golang.org/protobuf/types/known/timestamppb"
 
-	"github.com/open-telemetry/opentelemetry-collector-contrib/internal/coreinternal/metricstestutil"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/internal/splunk"
-	internaldata "github.com/open-telemetry/opentelemetry-collector-contrib/pkg/translator/opencensus"
 )
 
 func TestNew(t *testing.T) {
@@ -81,35 +77,28 @@ func TestNew(t *testing.T) {
 }
 
 func TestConsumeMetricsData(t *testing.T) {
-	smallBatch := &agentmetricspb.ExportMetricsServiceRequest{
-		Node: &commonpb.Node{
-			Attributes: map[string]string{
-				"com.splunk.source": "test_splunk",
-			},
-		},
-		Resource: &resourcepb.Resource{Type: "test"},
-		Metrics: []*metricspb.Metric{
-			metricstestutil.Gauge(
-				"test_gauge",
-				[]string{"k0", "k1"},
-				metricstestutil.Timeseries(
-					time.Now(),
-					[]string{"v0", "v1"},
-					metricstestutil.Double(time.Now(), 123))),
-		},
-	}
+	smallBatch := pmetric.NewMetrics()
+	smallBatch.ResourceMetrics().AppendEmpty().Resource().Attributes().PutStr("com.splunk.source", "test_splunk")
+	m := smallBatch.ResourceMetrics().At(0).ScopeMetrics().AppendEmpty().Metrics().AppendEmpty()
+	m.SetName("test_gauge")
+	dp := m.SetEmptyGauge().DataPoints().AppendEmpty()
+	dp.Attributes().PutStr("k0", "v0")
+	dp.Attributes().PutStr("k1", "v1")
+	dp.SetTimestamp(pcommon.NewTimestampFromTime(time.Now()))
+	dp.SetDoubleValue(123)
 	tests := []struct {
 		name             string
-		md               *agentmetricspb.ExportMetricsServiceRequest
+		md               pmetric.Metrics
 		reqTestFunc      func(t *testing.T, r *http.Request)
 		httpResponseCode int
+		maxContentLength int
 		wantErr          bool
 	}{
 		{
 			name: "happy_path",
 			md:   smallBatch,
 			reqTestFunc: func(t *testing.T, r *http.Request) {
-				body, err := ioutil.ReadAll(r.Body)
+				body, err := io.ReadAll(r.Body)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -141,9 +130,33 @@ func TestConsumeMetricsData(t *testing.T) {
 			wantErr:          true,
 		},
 		{
-			name:             "large_batch",
-			md:               generateLargeBatch(),
-			reqTestFunc:      nil,
+			name: "large_batch",
+			md:   generateLargeBatch(),
+			reqTestFunc: func(t *testing.T, r *http.Request) {
+				body, err := io.ReadAll(r.Body)
+				if err != nil {
+					t.Fatal(err)
+				}
+				assert.Equal(t, "keep-alive", r.Header.Get("Connection"))
+				assert.Equal(t, "application/json", r.Header.Get("Content-Type"))
+				assert.Equal(t, "OpenTelemetry-Collector Splunk Exporter/v0.0.1", r.Header.Get("User-Agent"))
+				assert.Equal(t, "Splunk 1234", r.Header.Get("Authorization"))
+				assert.Equal(t, "gzip", r.Header.Get("Content-Encoding"))
+				zipReader, err := gzip.NewReader(bytes.NewReader(body))
+				assert.NoError(t, err)
+				bodyBytes, _ := io.ReadAll(zipReader)
+				firstPayload := strings.Split(string(bodyBytes), "}{")[0]
+				var metric splunk.Event
+				err = json.Unmarshal([]byte(firstPayload+"}"), &metric)
+				if err != nil {
+					t.Fatal(err)
+				}
+				assert.Equal(t, "test_splunk", metric.Source)
+				assert.Equal(t, "test_type", metric.SourceType)
+				assert.Equal(t, "test_index", metric.Index)
+
+			},
+			maxContentLength: 1800,
 			httpResponseCode: http.StatusAccepted,
 		},
 	}
@@ -172,12 +185,12 @@ func TestConsumeMetricsData(t *testing.T) {
 			config.Index = "test_index"
 			config.SplunkAppName = "OpenTelemetry-Collector Splunk Exporter"
 			config.SplunkAppVersion = "v0.0.1"
+			config.MaxContentLengthMetrics = 1800
 
 			sender, err := buildClient(options, config, zap.NewNop())
 			assert.NoError(t, err)
 
-			md := internaldata.OCToMetrics(tt.md.Node, tt.md.Resource, tt.md.Metrics)
-			err = sender.pushMetricsData(context.Background(), md)
+			err = sender.pushMetricsData(context.Background(), tt.md)
 			if tt.wantErr {
 				assert.Error(t, err)
 				return
@@ -188,33 +201,25 @@ func TestConsumeMetricsData(t *testing.T) {
 	}
 }
 
-func generateLargeBatch() *agentmetricspb.ExportMetricsServiceRequest {
-	md := &agentmetricspb.ExportMetricsServiceRequest{
-		Node: &commonpb.Node{
-			ServiceInfo: &commonpb.ServiceInfo{Name: "test_splunkhec"},
-		},
-		Resource: &resourcepb.Resource{Type: "test"},
-	}
-
+func generateLargeBatch() pmetric.Metrics {
 	ts := time.Now()
-	for i := 0; i < 65000; i++ {
-		md.Metrics = append(md.Metrics,
-			metricstestutil.Gauge(
-				"test_"+strconv.Itoa(i),
-				[]string{"k0", "k1"},
-				metricstestutil.Timeseries(
-					time.Now(),
-					[]string{"v0", "v1"},
-					&metricspb.Point{
-						Timestamp: timestamppb.New(ts),
-						Value:     &metricspb.Point_Int64Value{Int64Value: int64(i)},
-					},
-				),
-			),
-		)
+	metrics := pmetric.NewMetrics()
+	rm := metrics.ResourceMetrics().AppendEmpty()
+	rm.Resource().Attributes().PutStr(conventions.AttributeServiceName, "test_splunkhec")
+	rm.Resource().Attributes().PutStr(splunk.DefaultSourceLabel, "test_splunk")
+	ms := rm.ScopeMetrics().AppendEmpty().Metrics()
+
+	for i := 0; i < 6500; i++ {
+		m := ms.AppendEmpty()
+		m.SetName("test_" + strconv.Itoa(i))
+		dp := m.SetEmptyGauge().DataPoints().AppendEmpty()
+		dp.Attributes().PutStr("k0", "v0")
+		dp.Attributes().PutStr("k1", "v1")
+		dp.SetTimestamp(pcommon.NewTimestampFromTime(ts))
+		dp.SetIntValue(int64(i))
 	}
 
-	return md
+	return metrics
 }
 
 func generateLargeLogsBatch() plog.Logs {
@@ -225,12 +230,12 @@ func generateLargeLogsBatch() plog.Logs {
 	ts := pcommon.Timestamp(123)
 	for i := 0; i < 65000; i++ {
 		logRecord := sl.LogRecords().AppendEmpty()
-		logRecord.Body().SetStringVal("mylog")
-		logRecord.Attributes().InsertString(splunk.DefaultSourceLabel, "myapp")
-		logRecord.Attributes().InsertString(splunk.DefaultSourceTypeLabel, "myapp-type")
-		logRecord.Attributes().InsertString(splunk.DefaultIndexLabel, "myindex")
-		logRecord.Attributes().InsertString(conventions.AttributeHostName, "myhost")
-		logRecord.Attributes().InsertString("custom", "custom")
+		logRecord.Body().SetStr("mylog")
+		logRecord.Attributes().PutStr(splunk.DefaultSourceLabel, "myapp")
+		logRecord.Attributes().PutStr(splunk.DefaultSourceTypeLabel, "myapp-type")
+		logRecord.Attributes().PutStr(splunk.DefaultIndexLabel, "myindex")
+		logRecord.Attributes().PutStr(conventions.AttributeHostName, "myhost")
+		logRecord.Attributes().PutStr("custom", "custom")
 		logRecord.SetTimestamp(ts)
 	}
 
@@ -240,9 +245,9 @@ func generateLargeLogsBatch() plog.Logs {
 func TestConsumeLogsData(t *testing.T) {
 	smallBatch := plog.NewLogs()
 	logRecord := smallBatch.ResourceLogs().AppendEmpty().ScopeLogs().AppendEmpty().LogRecords().AppendEmpty()
-	logRecord.Body().SetStringVal("mylog")
-	logRecord.Attributes().InsertString(conventions.AttributeHostName, "myhost")
-	logRecord.Attributes().InsertString("custom", "custom")
+	logRecord.Body().SetStr("mylog")
+	logRecord.Attributes().PutStr(conventions.AttributeHostName, "myhost")
+	logRecord.Attributes().PutStr("custom", "custom")
 	logRecord.SetTimestamp(123)
 	tests := []struct {
 		name             string
@@ -255,7 +260,7 @@ func TestConsumeLogsData(t *testing.T) {
 			name: "happy_path",
 			ld:   smallBatch,
 			reqTestFunc: func(t *testing.T, r *http.Request) {
-				body, err := ioutil.ReadAll(r.Body)
+				body, err := io.ReadAll(r.Body)
 				if err != nil {
 					t.Fatal(err)
 				}

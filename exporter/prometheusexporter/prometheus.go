@@ -17,7 +17,6 @@ package prometheusexporter // import "github.com/open-telemetry/opentelemetry-co
 import (
 	"context"
 	"errors"
-	"net"
 	"net/http"
 	"strings"
 
@@ -28,12 +27,14 @@ import (
 )
 
 type prometheusExporter struct {
+	config       Config
 	name         string
 	endpoint     string
 	shutdownFunc func() error
 	handler      http.Handler
 	collector    *collector
 	registry     *prometheus.Registry
+	settings     component.TelemetrySettings
 }
 
 var errBlankPrometheusAddress = errors.New("expecting a non-blank address to run the Prometheus metrics handler")
@@ -48,7 +49,8 @@ func newPrometheusExporter(config *Config, set component.ExporterCreateSettings)
 	registry := prometheus.NewRegistry()
 	_ = registry.Register(collector)
 	return &prometheusExporter{
-		name:         config.ID().String(),
+		config:       *config,
+		name:         set.ID.String(),
 		endpoint:     addr,
 		collector:    collector,
 		registry:     registry,
@@ -56,15 +58,17 @@ func newPrometheusExporter(config *Config, set component.ExporterCreateSettings)
 		handler: promhttp.HandlerFor(
 			registry,
 			promhttp.HandlerOpts{
-				ErrorHandling: promhttp.ContinueOnError,
-				ErrorLog:      newPromLogger(set.Logger),
+				ErrorHandling:     promhttp.ContinueOnError,
+				ErrorLog:          newPromLogger(set.Logger),
+				EnableOpenMetrics: config.EnableOpenMetrics,
 			},
 		),
+		settings: set.TelemetrySettings,
 	}, nil
 }
 
-func (pe *prometheusExporter) Start(_ context.Context, _ component.Host) error {
-	ln, err := net.Listen("tcp", pe.endpoint)
+func (pe *prometheusExporter) Start(_ context.Context, host component.Host) error {
+	ln, err := pe.config.ToListener()
 	if err != nil {
 		return err
 	}
@@ -73,7 +77,10 @@ func (pe *prometheusExporter) Start(_ context.Context, _ component.Host) error {
 
 	mux := http.NewServeMux()
 	mux.Handle("/metrics", pe.handler)
-	srv := &http.Server{Handler: mux}
+	srv, err := pe.config.ToServer(host, pe.settings, mux)
+	if err != nil {
+		return err
+	}
 	go func() {
 		_ = srv.Serve(ln)
 	}()

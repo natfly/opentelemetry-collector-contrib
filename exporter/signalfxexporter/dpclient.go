@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// nolint:errcheck
 package signalfxexporter // import "github.com/open-telemetry/opentelemetry-collector-contrib/exporter/signalfxexporter"
 
 import (
@@ -20,7 +19,6 @@ import (
 	"compress/gzip"
 	"context"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"net/url"
 	"path"
@@ -43,7 +41,7 @@ type sfxClientBase struct {
 	zippers   sync.Pool
 }
 
-var metricsMarshaler = pmetric.NewJSONMarshaler()
+var metricsMarshaler = &pmetric.JSONMarshaler{}
 
 // avoid attempting to compress things that fit into a single ethernet frame
 func (s *sfxClientBase) getReader(b []byte) (io.Reader, bool, error) {
@@ -138,8 +136,10 @@ func (s *sfxDPClient) pushMetricsDataForToken(ctx context.Context, sfxDataPoints
 		return len(sfxDataPoints), err
 	}
 
-	io.Copy(ioutil.Discard, resp.Body)
-	resp.Body.Close()
+	defer func() {
+		_, _ = io.Copy(io.Discard, resp.Body)
+		resp.Body.Close()
+	}()
 
 	err = splunk.HandleHTTPCode(resp)
 	if err != nil {
@@ -188,7 +188,7 @@ func (s *sfxDPClient) retrieveAccessToken(md pmetric.ResourceMetrics) string {
 
 	attrs := md.Resource().Attributes()
 	if accessToken, ok := attrs.Get(splunk.SFxAccessTokenLabel); ok {
-		return accessToken.StringVal()
+		return accessToken.Str()
 	}
 	return ""
 }

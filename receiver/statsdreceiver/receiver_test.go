@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// nolint:errcheck
 package statsdreceiver
 
 import (
@@ -68,7 +67,7 @@ func Test_statsdreceiver_New(t *testing.T) {
 				},
 				nextConsumer: consumertest.NewNop(),
 			},
-			wantErr: errors.New("unsupported transport \"unknown\" for receiver statsd"),
+			wantErr: errors.New("unsupported transport \"unknown\""),
 		},
 	}
 	for _, tt := range tests {
@@ -88,8 +87,8 @@ func TestStatsdReceiver_Flush(t *testing.T) {
 	r := rcv.(*statsdReceiver)
 	var metrics = pmetric.NewMetrics()
 	assert.Nil(t, r.Flush(ctx, metrics, nextConsumer))
-	r.Start(ctx, componenttest.NewNopHost())
-	r.Shutdown(ctx)
+	assert.NoError(t, r.Start(ctx, componenttest.NewNopHost()))
+	assert.NoError(t, r.Shutdown(ctx))
 }
 
 func Test_statsdreceiver_EndToEnd(t *testing.T) {
@@ -108,7 +107,7 @@ func Test_statsdreceiver_EndToEnd(t *testing.T) {
 			name: "default_config with 9s interval",
 			configFn: func() *Config {
 				return &Config{
-					ReceiverSettings: config.NewReceiverSettings(config.NewComponentID(typeStr)),
+					ReceiverSettings: config.NewReceiverSettings(component.NewID(typeStr)),
 					NetAddr: confignet.NetAddr{
 						Endpoint:  defaultBindEndpoint,
 						Transport: defaultTransport,
@@ -136,7 +135,9 @@ func Test_statsdreceiver_EndToEnd(t *testing.T) {
 			r.reporter = mr
 
 			require.NoError(t, r.Start(context.Background(), componenttest.NewNopHost()))
-			defer r.Shutdown(context.Background())
+			defer func() {
+				assert.NoError(t, r.Shutdown(context.Background()))
+			}()
 
 			statsdClient := tt.clientFn(t)
 
@@ -156,7 +157,7 @@ func Test_statsdreceiver_EndToEnd(t *testing.T) {
 			require.Equal(t, 1, mdd[0].ResourceMetrics().At(0).ScopeMetrics().At(0).Metrics().Len())
 			metric := mdd[0].ResourceMetrics().At(0).ScopeMetrics().At(0).Metrics().At(0)
 			assert.Equal(t, statsdMetric.Name, metric.Name())
-			assert.Equal(t, pmetric.MetricDataTypeSum, metric.DataType())
+			assert.Equal(t, pmetric.MetricTypeSum, metric.Type())
 			require.Equal(t, 1, metric.Sum().DataPoints().Len())
 		})
 	}

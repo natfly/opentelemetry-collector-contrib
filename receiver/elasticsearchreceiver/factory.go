@@ -1,4 +1,4 @@
-// Copyright  The OpenTelemetry Authors
+// Copyright The OpenTelemetry Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -40,14 +40,14 @@ func NewFactory() component.ReceiverFactory {
 	return component.NewReceiverFactory(
 		typeStr,
 		createDefaultConfig,
-		component.WithMetricsReceiverAndStabilityLevel(createMetricsReceiver, stability))
+		component.WithMetricsReceiver(createMetricsReceiver, stability))
 }
 
 // createDefaultConfig creates the default elasticsearchreceiver config.
-func createDefaultConfig() config.Receiver {
+func createDefaultConfig() component.Config {
 	return &Config{
 		ScraperControllerSettings: scraperhelper.ScraperControllerSettings{
-			ReceiverSettings:   config.NewReceiverSettings(config.NewComponentID(typeStr)),
+			ReceiverSettings:   config.NewReceiverSettings(component.NewID(typeStr)),
 			CollectionInterval: defaultCollectionInterval,
 		},
 		HTTPClientSettings: confighttp.HTTPClientSettings{
@@ -56,6 +56,7 @@ func createDefaultConfig() config.Receiver {
 		},
 		Metrics: metadata.DefaultMetricsSettings(),
 		Nodes:   []string{"_all"},
+		Indices: []string{"_all"},
 	}
 }
 
@@ -65,7 +66,7 @@ var errConfigNotES = errors.New("config was not an elasticsearch receiver config
 func createMetricsReceiver(
 	_ context.Context,
 	params component.ReceiverCreateSettings,
-	rConf config.Receiver,
+	rConf component.Config,
 	consumer consumer.Metrics,
 ) (component.MetricsReceiver, error) {
 	c, ok := rConf.(*Config)
@@ -73,6 +74,7 @@ func createMetricsReceiver(
 		return nil, errConfigNotES
 	}
 	es := newElasticSearchScraper(params, c)
+
 	scraper, err := scraperhelper.NewScraper(typeStr, es.scrape, scraperhelper.WithStart(es.start))
 	if err != nil {
 		return nil, err

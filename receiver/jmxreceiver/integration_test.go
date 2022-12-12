@@ -21,7 +21,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -76,7 +75,7 @@ func downloadJMXMetricGathererJAR(url string) (string, error) {
 	}
 	defer resp.Body.Close()
 
-	file, err := ioutil.TempFile("", "jmx-metrics.jar")
+	file, err := os.CreateTemp("", "jmx-metrics.jar")
 	if err != nil {
 		return "", err
 	}
@@ -172,7 +171,7 @@ func (suite *JMXIntegrationSuite) TestJMXReceiverHappyPath() {
 				},
 				LogLevel: "debug",
 			}
-			require.NoError(t, cfg.validate())
+			require.NoError(t, cfg.Validate())
 
 			consumer := new(consumertest.MetricsSink)
 			require.NotNil(t, consumer)
@@ -199,23 +198,23 @@ func (suite *JMXIntegrationSuite) TestJMXReceiverHappyPath() {
 				attributes := resource.Attributes()
 				lang, ok := attributes.Get("telemetry.sdk.language")
 				require.True(t, ok)
-				require.Equal(t, "java", lang.StringVal())
+				require.Equal(t, "java", lang.Str())
 
 				sdkName, ok := attributes.Get("telemetry.sdk.name")
 				require.True(t, ok)
-				require.Equal(t, "opentelemetry", sdkName.StringVal())
+				require.Equal(t, "opentelemetry", sdkName.Str())
 
 				version, ok := attributes.Get("telemetry.sdk.version")
 				require.True(t, ok)
-				require.NotEmpty(t, version.StringVal())
+				require.NotEmpty(t, version.Str())
 
 				customAttr, ok := attributes.Get("myattr")
 				require.True(t, ok)
-				require.Equal(t, "myvalue", customAttr.StringVal())
+				require.Equal(t, "myvalue", customAttr.Str())
 
 				anotherCustomAttr, ok := attributes.Get("myotherattr")
 				require.True(t, ok)
-				require.Equal(t, "myothervalue", anotherCustomAttr.StringVal())
+				require.Equal(t, "myothervalue", anotherCustomAttr.Str())
 
 				ilm := rm.ScopeMetrics().At(0)
 				require.Equal(t, "io.opentelemetry.contrib.jmxmetrics", ilm.Scope().Name())
@@ -228,7 +227,7 @@ func (suite *JMXIntegrationSuite) TestJMXReceiverHappyPath() {
 				require.Equal(t, "By", met.Unit())
 
 				// otel-java only uses int sum w/ non-monotonic for up down counters instead of gauge
-				require.Equal(t, pmetric.MetricDataTypeSum, met.DataType())
+				require.Equal(t, pmetric.MetricTypeSum, met.Type())
 				sum := met.Sum()
 				require.False(t, sum.IsMonotonic())
 

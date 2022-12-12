@@ -62,20 +62,20 @@ func (d *Detector) Detect(ctx context.Context) (resource pcommon.Resource, schem
 		return res, "", nil
 	}
 
-	attrs.InsertString(conventions.AttributeCloudProvider, "oci")
-	attrs.InsertString(conventions.AttributeCloudAccountID, oci.TenantId)
-	attrs.InsertString(conventions.AttributeCloudRegion, oci.CanonicalRegionName)
-	attrs.InsertString(conventions.AttributeCloudAvailabilityZone, oci.AvailabilityDomain)
-	attrs.InsertString(conventions.AttributeHostID, oci.Id)
-	attrs.InsertString(conventions.AttributeHostImageID, oci.Image)
-	attrs.InsertString("oci.compartment.id", oci.CompartmentId)
-	attrs.InsertString("oci.shape", oci.Shape)
+	attrs.PutStr(conventions.AttributeCloudProvider, "oci")
+	attrs.PutStr(conventions.AttributeCloudAccountID, oci.TenantId)
+	attrs.PutStr(conventions.AttributeCloudRegion, oci.CanonicalRegionName)
+	attrs.PutStr(conventions.AttributeCloudAvailabilityZone, oci.AvailabilityDomain)
+	attrs.PutStr(conventions.AttributeHostID, oci.Id)
+	attrs.PutStr(conventions.AttributeHostImageID, oci.Image)
+	attrs.PutStr("oci.compartment.id", oci.CompartmentId)
+	attrs.PutStr("oci.shape", oci.Shape)
 
 	if len(d.attributeJPaths) != 0 {
 		for _, entry := range d.attributeJPaths {
 			value := gjson.Get(oci.RawResponse, entry.Path)
 			if value.Exists() {
-				attrs.UpsertString(attributePrefix+entry.Name, value.String())
+				attrs.PutStr(attributePrefix+entry.Name, value.String())
 			}
 		}
 	}

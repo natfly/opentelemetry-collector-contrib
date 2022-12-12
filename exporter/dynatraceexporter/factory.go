@@ -38,14 +38,14 @@ func NewFactory() component.ExporterFactory {
 	return component.NewExporterFactory(
 		typeStr,
 		createDefaultConfig,
-		component.WithMetricsExporterAndStabilityLevel(createMetricsExporter, stability),
+		component.WithMetricsExporter(createMetricsExporter, stability),
 	)
 }
 
 // createDefaultConfig creates the default exporter configuration
-func createDefaultConfig() config.Exporter {
+func createDefaultConfig() component.Config {
 	return &dtconfig.Config{
-		ExporterSettings: config.NewExporterSettings(config.NewComponentID(typeStr)),
+		ExporterSettings: config.NewExporterSettings(component.NewID(typeStr)),
 		RetrySettings:    exporterhelper.NewDefaultRetrySettings(),
 		QueueSettings:    exporterhelper.NewDefaultQueueSettings(),
 		ResourceToTelemetrySettings: resourcetotelemetry.Settings{
@@ -64,7 +64,7 @@ func createDefaultConfig() config.Exporter {
 func createMetricsExporter(
 	ctx context.Context,
 	set component.ExporterCreateSettings,
-	c config.Exporter,
+	c component.Config,
 ) (component.MetricsExporter, error) {
 
 	cfg := c.(*dtconfig.Config)
@@ -72,8 +72,9 @@ func createMetricsExporter(
 	exp := newMetricsExporter(set, cfg)
 
 	exporter, err := exporterhelper.NewMetricsExporter(
-		cfg,
+		ctx,
 		set,
+		cfg,
 		exp.PushMetricsData,
 		exporterhelper.WithQueue(cfg.QueueSettings),
 		exporterhelper.WithRetry(cfg.RetrySettings),

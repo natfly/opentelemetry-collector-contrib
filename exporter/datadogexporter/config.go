@@ -21,6 +21,7 @@ import (
 	"regexp"
 	"strings"
 
+	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/config"
 	"go.opentelemetry.io/collector/config/confignet"
 	"go.opentelemetry.io/collector/confmap"
@@ -242,6 +243,16 @@ type TracesConfig struct {
 	flushInterval float64
 }
 
+// LogsConfig defines logs exporter specific configuration
+type LogsConfig struct {
+	// TCPAddr.Endpoint is the host of the Datadog intake server to send logs to.
+	// If unset, the value is obtained from the Site.
+	confignet.TCPAddr `mapstructure:",squash"`
+
+	// DumpPayloads report whether payloads should be dumped when logging level is debug.
+	DumpPayloads bool `mapstructure:"dump_payloads"`
+}
+
 // TagsConfig defines the tag-related configuration
 // It is embedded in the configuration
 type TagsConfig struct {
@@ -299,7 +310,7 @@ type HostMetadataConfig struct {
 	// - 'config_or_system' picks the host metadata hostname from the 'hostname' setting,
 	//    If this is empty it will use available system APIs and cloud provider endpoints.
 	//
-	// The current default if 'first_resource'.
+	// The default is 'config_or_system'.
 	HostnameSource HostnameSource `mapstructure:"hostname_source"`
 
 	// Tags is a list of host tags.
@@ -339,6 +350,9 @@ type Config struct {
 	// Traces defines the Traces exporter specific configuration
 	Traces TracesConfig `mapstructure:"traces"`
 
+	// Logs defines the Logs exporter specific configuration
+	Logs LogsConfig `mapstructure:"logs"`
+
 	// HostMetadata defines the host metadata specific configuration
 	HostMetadata HostMetadataConfig `mapstructure:"host_metadata"`
 
@@ -352,9 +366,9 @@ type Config struct {
 	OnlyMetadata bool `mapstructure:"only_metadata"`
 }
 
-var _ config.Exporter = (*Config)(nil)
+var _ component.Config = (*Config)(nil)
 
-// Validate the configuration for errors. This is required by config.Exporter.
+// Validate the configuration for errors. This is required by component.Config.
 func (c *Config) Validate() error {
 	if c.OnlyMetadata && (!c.HostMetadata.Enabled || c.HostMetadata.HostnameSource != HostnameSourceFirstResource) {
 		return errNoMetadata
@@ -461,7 +475,7 @@ func handleRemovedSettings(configMap *confmap.Conf) (err error) {
 	return
 }
 
-var _ config.Unmarshallable = (*Config)(nil)
+var _ confmap.Unmarshaler = (*Config)(nil)
 
 // Unmarshal a configuration map into the configuration struct.
 func (c *Config) Unmarshal(configMap *confmap.Conf) error {
@@ -469,7 +483,7 @@ func (c *Config) Unmarshal(configMap *confmap.Conf) error {
 		return err
 	}
 
-	err := configMap.UnmarshalExact(c)
+	err := configMap.Unmarshal(c, confmap.WithErrorUnused())
 	if err != nil {
 		return err
 	}
@@ -482,6 +496,9 @@ func (c *Config) Unmarshal(configMap *confmap.Conf) error {
 	}
 	if !configMap.IsSet("traces::endpoint") {
 		c.Traces.TCPAddr.Endpoint = fmt.Sprintf("https://trace.agent.%s", c.API.Site)
+	}
+	if !configMap.IsSet("logs::endpoint") {
+		c.Logs.TCPAddr.Endpoint = fmt.Sprintf("https://http-intake.logs.%s", c.API.Site)
 	}
 	return nil
 }

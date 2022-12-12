@@ -1,4 +1,4 @@
-// Copyright  The OpenTelemetry Authors
+// Copyright The OpenTelemetry Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -21,11 +21,12 @@ import (
 
 	"github.com/Shopify/sarama"
 	"github.com/stretchr/testify/assert"
+	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/component/componenttest"
 	"go.opentelemetry.io/collector/config/configtls"
 	"go.opentelemetry.io/collector/consumer/consumertest"
+	"go.opentelemetry.io/collector/pdata/pmetric"
 	"go.opentelemetry.io/collector/receiver/scraperhelper"
-	"go.uber.org/zap"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/exporter/kafkaexporter"
 )
@@ -41,7 +42,7 @@ func TestNewReceiver_invalid_version_err(t *testing.T) {
 func TestNewReceiver_invalid_scraper_error(t *testing.T) {
 	c := createDefaultConfig().(*Config)
 	c.Scrapers = []string{"brokers", "cpu"}
-	mockScraper := func(context.Context, Config, *sarama.Config, *zap.Logger) (scraperhelper.Scraper, error) {
+	mockScraper := func(context.Context, Config, *sarama.Config, component.ReceiverCreateSettings) (scraperhelper.Scraper, error) {
 		return nil, nil
 	}
 	allScrapers["brokers"] = mockScraper
@@ -71,8 +72,10 @@ func TestNewReceiver_invalid_auth_error(t *testing.T) {
 func TestNewReceiver(t *testing.T) {
 	c := createDefaultConfig().(*Config)
 	c.Scrapers = []string{"brokers"}
-	mockScraper := func(context.Context, Config, *sarama.Config, *zap.Logger) (scraperhelper.Scraper, error) {
-		return nil, nil
+	mockScraper := func(context.Context, Config, *sarama.Config, component.ReceiverCreateSettings) (scraperhelper.Scraper, error) {
+		return scraperhelper.NewScraper("brokers", func(ctx context.Context) (pmetric.Metrics, error) {
+			return pmetric.Metrics{}, nil
+		})
 	}
 	allScrapers["brokers"] = mockScraper
 	r, err := newMetricsReceiver(context.Background(), *c, componenttest.NewNopReceiverCreateSettings(), consumertest.NewNop())
@@ -83,7 +86,7 @@ func TestNewReceiver(t *testing.T) {
 func TestNewReceiver_handles_scraper_error(t *testing.T) {
 	c := createDefaultConfig().(*Config)
 	c.Scrapers = []string{"brokers"}
-	mockScraper := func(context.Context, Config, *sarama.Config, *zap.Logger) (scraperhelper.Scraper, error) {
+	mockScraper := func(context.Context, Config, *sarama.Config, component.ReceiverCreateSettings) (scraperhelper.Scraper, error) {
 		return nil, fmt.Errorf("fail")
 	}
 	allScrapers["brokers"] = mockScraper

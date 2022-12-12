@@ -19,7 +19,6 @@ import (
 	"fmt"
 
 	"go.opentelemetry.io/collector/component"
-	"go.opentelemetry.io/collector/config"
 	"go.opentelemetry.io/collector/consumer"
 	"go.uber.org/zap"
 
@@ -33,7 +32,8 @@ type receiverCreator struct {
 	params          component.ReceiverCreateSettings
 	cfg             *Config
 	nextConsumer    consumer.Metrics
-	observerHandler observerHandler
+	observerHandler *observerHandler
+	observables     []observer.Observable
 }
 
 // newReceiverCreator creates the receiver_creator with the given parameters.
@@ -65,38 +65,39 @@ var _ component.Host = (*loggingHost)(nil)
 
 // Start receiver_creator.
 func (rc *receiverCreator) Start(_ context.Context, host component.Host) error {
-	rc.observerHandler = observerHandler{
+	rc.observerHandler = &observerHandler{
 		config:                rc.cfg,
-		logger:                rc.params.Logger,
+		params:                rc.params,
 		receiversByEndpointID: receiverMap{},
 		nextConsumer:          rc.nextConsumer,
 		runner: &receiverRunner{
 			params:      rc.params,
-			idNamespace: rc.cfg.ID(),
+			idNamespace: rc.params.ID,
 			host:        &loggingHost{host, rc.params.Logger},
-		}}
+		},
+	}
 
-	observers := map[config.Type]observer.Observable{}
+	observers := map[component.ID]observer.Observable{}
 
-	// Match all configured observers to the extensions that are running.
+	// Match all configured observables to the extensions that are running.
 	for _, watchObserver := range rc.cfg.WatchObservers {
-		for cfg, ext := range host.GetExtensions() {
-			if cfg.Type() != watchObserver {
+		for cid, ext := range host.GetExtensions() {
+			if cid != watchObserver {
 				continue
 			}
 
 			obs, ok := ext.(observer.Observable)
 			if !ok {
-				return fmt.Errorf("extension %q in watch_observers is not an observer", watchObserver)
+				return fmt.Errorf("extension %q in watch_observers is not an observer", watchObserver.String())
 			}
 			observers[watchObserver] = obs
 		}
 	}
 
-	// Make sure all observers are present before starting any.
+	// Make sure all observables are present before starting any.
 	for _, watchObserver := range rc.cfg.WatchObservers {
 		if observers[watchObserver] == nil {
-			return fmt.Errorf("failed to find observer %q in the extensions list", watchObserver)
+			return fmt.Errorf("failed to find observer %q in the extensions list", watchObserver.String())
 		}
 	}
 
@@ -106,7 +107,8 @@ func (rc *receiverCreator) Start(_ context.Context, host component.Host) error {
 
 	// Start all configured watchers.
 	for _, observable := range observers {
-		observable.ListAndWatch(&rc.observerHandler)
+		rc.observables = append(rc.observables, observable)
+		observable.ListAndWatch(rc.observerHandler)
 	}
 
 	return nil
@@ -114,5 +116,8 @@ func (rc *receiverCreator) Start(_ context.Context, host component.Host) error {
 
 // Shutdown stops the receiver_creator and all its receivers started at runtime.
 func (rc *receiverCreator) Shutdown(context.Context) error {
+	for _, observable := range rc.observables {
+		observable.Unsubscribe(rc.observerHandler)
+	}
 	return rc.observerHandler.shutdown()
 }

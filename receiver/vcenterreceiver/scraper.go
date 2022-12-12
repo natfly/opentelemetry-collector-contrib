@@ -1,4 +1,4 @@
-// Copyright  The OpenTelemetry Authors
+// Copyright The OpenTelemetry Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -25,53 +25,18 @@ import (
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/pmetric"
 	"go.opentelemetry.io/collector/receiver/scrapererror"
-	"go.opentelemetry.io/collector/service/featuregate"
 	"go.uber.org/zap"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/vcenterreceiver/internal/metadata"
 )
 
-const (
-	emitMetricsWithDirectionAttributeFeatureGateID    = "receiver.vcenterreceiver.emitMetricsWithDirectionAttribute"
-	emitMetricsWithoutDirectionAttributeFeatureGateID = "receiver.vcenterreceiver.emitMetricsWithoutDirectionAttribute"
-)
-
-var (
-	emitMetricsWithDirectionAttributeFeatureGate = featuregate.Gate{
-		ID:      emitMetricsWithDirectionAttributeFeatureGateID,
-		Enabled: true,
-		Description: "Some vcenter metrics reported are transitioning from being reported with a direction " +
-			"attribute to being reported with the direction included in the metric name to adhere to the " +
-			"OpenTelemetry specification. This feature gate controls emitting the old metrics with the direction " +
-			"attribute. For more details, see: " +
-			"https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/main/receiver/vcenterreceiver/README.md#feature-gate-configurations",
-	}
-
-	emitMetricsWithoutDirectionAttributeFeatureGate = featuregate.Gate{
-		ID:      emitMetricsWithoutDirectionAttributeFeatureGateID,
-		Enabled: false,
-		Description: "Some vcenter metrics reported are transitioning from being reported with a direction " +
-			"attribute to being reported with the direction included in the metric name to adhere to the " +
-			"OpenTelemetry specification. This feature gate controls emitting the new metrics without the direction " +
-			"attribute. For more details, see: " +
-			"https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/main/receiver/vcenterreceiver/README.md#feature-gate-configurations",
-	}
-)
-
-func init() {
-	featuregate.GetRegistry().MustRegister(emitMetricsWithDirectionAttributeFeatureGate)
-	featuregate.GetRegistry().MustRegister(emitMetricsWithoutDirectionAttributeFeatureGate)
-}
-
-var _ component.Receiver = (*vcenterMetricScraper)(nil)
+var _ component.MetricsReceiver = (*vcenterMetricScraper)(nil)
 
 type vcenterMetricScraper struct {
-	client                               *vcenterClient
-	config                               *Config
-	mb                                   *metadata.MetricsBuilder
-	logger                               *zap.Logger
-	emitMetricsWithDirectionAttribute    bool
-	emitMetricsWithoutDirectionAttribute bool
+	client *vcenterClient
+	config *Config
+	mb     *metadata.MetricsBuilder
+	logger *zap.Logger
 }
 
 func newVmwareVcenterScraper(
@@ -81,12 +46,10 @@ func newVmwareVcenterScraper(
 ) *vcenterMetricScraper {
 	client := newVcenterClient(config)
 	return &vcenterMetricScraper{
-		client:                               client,
-		config:                               config,
-		logger:                               logger,
-		mb:                                   metadata.NewMetricsBuilder(config.Metrics, settings.BuildInfo),
-		emitMetricsWithDirectionAttribute:    featuregate.GetRegistry().IsEnabled(emitMetricsWithDirectionAttributeFeatureGateID),
-		emitMetricsWithoutDirectionAttribute: featuregate.GetRegistry().IsEnabled(emitMetricsWithoutDirectionAttributeFeatureGateID),
+		client: client,
+		config: config,
+		logger: logger,
+		mb:     metadata.NewMetricsBuilder(config.Metrics, settings.BuildInfo),
 	}
 }
 
@@ -187,7 +150,7 @@ func (v *vcenterMetricScraper) collectDatastores(
 	}
 
 	for _, ds := range datastores {
-		v.collectDatastore(ctx, colTime, ds, errs)
+		v.collectDatastore(ctx, colTime, ds, cluster, errs)
 	}
 }
 
@@ -195,6 +158,7 @@ func (v *vcenterMetricScraper) collectDatastore(
 	ctx context.Context,
 	now pcommon.Timestamp,
 	ds *object.Datastore,
+	cluster *object.ClusterComputeResource,
 	errs *scrapererror.ScrapeErrors,
 ) {
 	var moDS mo.Datastore
@@ -206,6 +170,7 @@ func (v *vcenterMetricScraper) collectDatastore(
 
 	v.recordDatastoreProperties(now, moDS)
 	v.mb.EmitForResource(
+		metadata.WithVcenterClusterName(cluster.Name()),
 		metadata.WithVcenterDatastoreName(moDS.Name),
 	)
 }
@@ -304,8 +269,6 @@ func (v *vcenterMetricScraper) collectVMs(
 			continue
 		}
 
-		vmUUID := moVM.Config.InstanceUuid
-
 		if string(moVM.Runtime.PowerState) == "poweredOff" {
 			poweredOffVMs++
 		} else {
@@ -322,6 +285,12 @@ func (v *vcenterMetricScraper) collectVMs(
 			errs.AddPartial(1, err)
 			return
 		}
+
+		if moVM.Config == nil {
+			errs.AddPartial(1, fmt.Errorf("vm config empty for %s", hostname))
+			continue
+		}
+		vmUUID := moVM.Config.InstanceUuid
 
 		v.collectVM(ctx, colTime, moVM, errs)
 		v.mb.EmitForResource(

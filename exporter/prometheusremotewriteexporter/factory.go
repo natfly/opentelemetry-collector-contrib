@@ -39,11 +39,11 @@ func NewFactory() component.ExporterFactory {
 	return component.NewExporterFactory(
 		typeStr,
 		createDefaultConfig,
-		component.WithMetricsExporterAndStabilityLevel(createMetricsExporter, stability))
+		component.WithMetricsExporter(createMetricsExporter, stability))
 }
 
-func createMetricsExporter(_ context.Context, set component.ExporterCreateSettings,
-	cfg config.Exporter) (component.MetricsExporter, error) {
+func createMetricsExporter(ctx context.Context, set component.ExporterCreateSettings,
+	cfg component.Config) (component.MetricsExporter, error) {
 
 	prwCfg, ok := cfg.(*Config)
 	if !ok {
@@ -62,8 +62,9 @@ func createMetricsExporter(_ context.Context, set component.ExporterCreateSettin
 	// without considering this limitation, we experience
 	// "out of order samples" errors.
 	exporter, err := exporterhelper.NewMetricsExporter(
-		cfg,
+		ctx,
 		set,
+		cfg,
 		prwe.PushMetrics,
 		exporterhelper.WithTimeout(prwCfg.TimeoutSettings),
 		exporterhelper.WithQueue(exporterhelper.QueueSettings{
@@ -81,9 +82,9 @@ func createMetricsExporter(_ context.Context, set component.ExporterCreateSettin
 	return resourcetotelemetry.WrapMetricsExporter(prwCfg.ResourceToTelemetrySettings, exporter), nil
 }
 
-func createDefaultConfig() config.Exporter {
+func createDefaultConfig() component.Config {
 	return &Config{
-		ExporterSettings: config.NewExporterSettings(config.NewComponentID(typeStr)),
+		ExporterSettings: config.NewExporterSettings(component.NewID(typeStr)),
 		Namespace:        "",
 		ExternalLabels:   map[string]string{},
 		TimeoutSettings:  exporterhelper.NewDefaultTimeoutSettings(),
@@ -106,6 +107,9 @@ func createDefaultConfig() config.Exporter {
 			Enabled:      true,
 			QueueSize:    10000,
 			NumConsumers: 5,
+		},
+		TargetInfo: &TargetInfo{
+			Enabled: true,
 		},
 	}
 }

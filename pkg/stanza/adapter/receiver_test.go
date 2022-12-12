@@ -29,6 +29,7 @@ import (
 	"go.uber.org/zap"
 	"gopkg.in/yaml.v2"
 
+	"github.com/open-telemetry/opentelemetry-collector-contrib/extension/storage/storagetest"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/stanza/entry"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/stanza/operator"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/stanza/pipeline"
@@ -37,7 +38,7 @@ import (
 func TestStart(t *testing.T) {
 	mockConsumer := &consumertest.LogsSink{}
 
-	factory := NewFactory(TestReceiverType{}, component.StabilityLevelInDevelopment)
+	factory := NewFactory(TestReceiverType{}, component.StabilityLevelDevelopment)
 
 	logsReceiver, err := factory.CreateLogsReceiver(
 		context.Background(),
@@ -66,10 +67,10 @@ func TestStart(t *testing.T) {
 func TestHandleStartError(t *testing.T) {
 	mockConsumer := &consumertest.LogsSink{}
 
-	factory := NewFactory(TestReceiverType{}, component.StabilityLevelInDevelopment)
+	factory := NewFactory(TestReceiverType{}, component.StabilityLevelDevelopment)
 
 	cfg := factory.CreateDefaultConfig().(*TestConfig)
-	cfg.Input = newUnstartableParams()
+	cfg.Input = NewUnstartableConfig()
 
 	receiver, err := factory.CreateLogsReceiver(context.Background(), componenttest.NewNopReceiverCreateSettings(), cfg, mockConsumer)
 	require.NoError(t, err, "receiver should successfully build")
@@ -80,7 +81,7 @@ func TestHandleStartError(t *testing.T) {
 
 func TestHandleConsumeError(t *testing.T) {
 	mockConsumer := &mockLogsRejecter{}
-	factory := NewFactory(TestReceiverType{}, component.StabilityLevelInDevelopment)
+	factory := NewFactory(TestReceiverType{}, component.StabilityLevelDevelopment)
 
 	logsReceiver, err := factory.CreateLogsReceiver(context.Background(), componenttest.NewNopReceiverCreateSettings(), factory.CreateDefaultConfig(), mockConsumer)
 	require.NoError(t, err, "receiver should successfully build")
@@ -111,12 +112,10 @@ func BenchmarkReadLine(b *testing.B) {
   start_at: beginning`,
 		filePath)
 
-	operatorCfgs := []operator.Config{}
+	var operatorCfgs []operator.Config
 	require.NoError(b, yaml.Unmarshal([]byte(pipelineYaml), &operatorCfgs))
 
-	emitter := NewLogEmitter(
-		LogEmitterWithLogger(zap.NewNop().Sugar()),
-	)
+	emitter := NewLogEmitter(zap.NewNop().Sugar())
 	defer func() {
 		require.NoError(b, emitter.Stop())
 	}()
@@ -135,9 +134,15 @@ func BenchmarkReadLine(b *testing.B) {
 		require.NoError(b, err)
 	}
 
+	storageClient := storagetest.NewInMemoryClient(
+		component.KindReceiver,
+		component.NewID("foolog"),
+		"test",
+	)
+
 	// // Run the actual benchmark
 	b.ResetTimer()
-	require.NoError(b, pipe.Start(newMockPersister()))
+	require.NoError(b, pipe.Start(storageClient))
 	for i := 0; i < b.N; i++ {
 		entries := <-emitter.logChan
 		for _, e := range entries {
@@ -172,12 +177,10 @@ func BenchmarkParseAndMap(b *testing.B) {
 
 	pipelineYaml := fmt.Sprintf("%s%s", fileInputYaml, regexParserYaml)
 
-	operatorCfgs := []operator.Config{}
+	var operatorCfgs []operator.Config
 	require.NoError(b, yaml.Unmarshal([]byte(pipelineYaml), &operatorCfgs))
 
-	emitter := NewLogEmitter(
-		LogEmitterWithLogger(zap.NewNop().Sugar()),
-	)
+	emitter := NewLogEmitter(zap.NewNop().Sugar())
 	defer func() {
 		require.NoError(b, emitter.Stop())
 	}()
@@ -196,9 +199,15 @@ func BenchmarkParseAndMap(b *testing.B) {
 		require.NoError(b, err)
 	}
 
+	storageClient := storagetest.NewInMemoryClient(
+		component.KindReceiver,
+		component.NewID("foolog"),
+		"test",
+	)
+
 	// // Run the actual benchmark
 	b.ResetTimer()
-	require.NoError(b, pipe.Start(newMockPersister()))
+	require.NoError(b, pipe.Start(storageClient))
 	for i := 0; i < b.N; i++ {
 		entries := <-emitter.logChan
 		for _, e := range entries {

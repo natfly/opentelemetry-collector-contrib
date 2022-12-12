@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// nolint:errcheck
 package splunkhecreceiver // import "github.com/open-telemetry/opentelemetry-collector-contrib/receiver/splunkhecreceiver"
 
 import (
@@ -21,7 +20,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net"
 	"net/http"
 	"strings"
@@ -107,6 +106,14 @@ func newMetricsReceiver(
 		transport = "https"
 	}
 
+	obsrecv, err := obsreport.NewReceiver(obsreport.ReceiverSettings{
+		ReceiverID:             settings.ID,
+		Transport:              transport,
+		ReceiverCreateSettings: settings,
+	})
+	if err != nil {
+		return nil, err
+	}
 	r := &splunkReceiver{
 		settings:        settings,
 		config:          &config,
@@ -118,11 +125,7 @@ func newMetricsReceiver(
 			ReadHeaderTimeout: defaultServerTimeout,
 			WriteTimeout:      defaultServerTimeout,
 		},
-		obsrecv: obsreport.NewReceiver(obsreport.ReceiverSettings{
-			ReceiverID:             config.ID(),
-			Transport:              transport,
-			ReceiverCreateSettings: settings,
-		}),
+		obsrecv:        obsrecv,
 		gzipReaderPool: &sync.Pool{New: func() interface{} { return new(gzip.Reader) }},
 	}
 
@@ -147,6 +150,15 @@ func newLogsReceiver(
 		transport = "https"
 	}
 
+	obsrecv, err := obsreport.NewReceiver(obsreport.ReceiverSettings{
+		ReceiverID:             settings.ID,
+		Transport:              transport,
+		ReceiverCreateSettings: settings,
+	})
+	if err != nil {
+		return nil, err
+	}
+
 	r := &splunkReceiver{
 		settings:     settings,
 		config:       &config,
@@ -159,11 +171,7 @@ func newLogsReceiver(
 			WriteTimeout:      defaultServerTimeout,
 		},
 		gzipReaderPool: &sync.Pool{New: func() interface{} { return new(gzip.Reader) }},
-		obsrecv: obsreport.NewReceiver(obsreport.ReceiverSettings{
-			ReceiverID:             config.ID(),
-			Transport:              transport,
-			ReceiverCreateSettings: settings,
-		}),
+		obsrecv:        obsrecv,
 	}
 
 	return r, nil
@@ -186,6 +194,7 @@ func (r *splunkReceiver) Start(_ context.Context, host component.Host) error {
 	}
 
 	mx := mux.NewRouter()
+	mx.NewRoute().Path(r.config.HealthPath).HandlerFunc(r.handleHealthReq)
 	if r.logsConsumer != nil {
 		mx.NewRoute().Path(r.config.RawPath).HandlerFunc(r.handleRawReq)
 	}
@@ -247,7 +256,7 @@ func (r *splunkReceiver) handleRawReq(resp http.ResponseWriter, req *http.Reques
 
 		if err != nil {
 			r.failRequest(ctx, resp, http.StatusBadRequest, errGzipReaderRespBody, 0, err)
-			_, _ = ioutil.ReadAll(req.Body)
+			_, _ = io.ReadAll(req.Body)
 			_ = req.Body.Close()
 			return
 		}
@@ -268,7 +277,7 @@ func (r *splunkReceiver) handleRawReq(resp http.ResponseWriter, req *http.Reques
 	for sc.Scan() {
 		logRecord := sl.LogRecords().AppendEmpty()
 		logLine := sc.Text()
-		logRecord.Body().SetStringVal(logLine)
+		logRecord.Body().SetStr(logLine)
 	}
 	consumerErr := r.logsConsumer.ConsumeLogs(ctx, ld)
 
@@ -277,7 +286,7 @@ func (r *splunkReceiver) handleRawReq(resp http.ResponseWriter, req *http.Reques
 	if consumerErr != nil {
 		r.failRequest(ctx, resp, http.StatusInternalServerError, errInternalServerError, sl.LogRecords().Len(), consumerErr)
 	} else {
-		resp.WriteHeader(http.StatusAccepted)
+		resp.WriteHeader(http.StatusOK)
 		r.obsrecv.EndLogsOp(ctx, typeStr, sl.LogRecords().Len(), nil)
 	}
 }
@@ -314,7 +323,9 @@ func (r *splunkReceiver) handleReq(resp http.ResponseWriter, req *http.Request) 
 	}
 
 	if req.ContentLength == 0 {
-		resp.Write(okRespBody)
+		if _, err := resp.Write(okRespBody); err != nil {
+			r.failRequest(ctx, resp, http.StatusInternalServerError, errInternalServerError, 0, err)
+		}
 		return
 	}
 
@@ -358,8 +369,11 @@ func (r *splunkReceiver) consumeMetrics(ctx context.Context, events []*splunk.Ev
 	if decodeErr != nil {
 		r.failRequest(ctx, resp, http.StatusInternalServerError, errInternalServerError, len(events), decodeErr)
 	} else {
-		resp.WriteHeader(http.StatusAccepted)
-		resp.Write(okRespBody)
+		resp.WriteHeader(http.StatusOK)
+		_, err := resp.Write(okRespBody)
+		if err != nil {
+			r.failRequest(ctx, resp, http.StatusInternalServerError, errInternalServerError, len(events), err)
+		}
 	}
 }
 
@@ -376,8 +390,10 @@ func (r *splunkReceiver) consumeLogs(ctx context.Context, events []*splunk.Event
 	if decodeErr != nil {
 		r.failRequest(ctx, resp, http.StatusInternalServerError, errInternalServerError, len(events), decodeErr)
 	} else {
-		resp.WriteHeader(http.StatusAccepted)
-		resp.Write(okRespBody)
+		resp.WriteHeader(http.StatusOK)
+		if _, err := resp.Write(okRespBody); err != nil {
+			r.failRequest(ctx, resp, http.StatusInternalServerError, errInternalServerError, len(events), err)
+		}
 	}
 }
 
@@ -387,7 +403,7 @@ func (r *splunkReceiver) createResourceCustomizer(req *http.Request) func(resour
 		if strings.HasPrefix(accessToken, splunk.HECTokenHeader+" ") {
 			accessTokenValue := accessToken[len(splunk.HECTokenHeader)+1:]
 			return func(resource pcommon.Resource) {
-				resource.Attributes().InsertString(splunk.HecTokenLabel, accessTokenValue)
+				resource.Attributes().PutStr(splunk.HecTokenLabel, accessTokenValue)
 			}
 		}
 	}
@@ -427,6 +443,10 @@ func (r *splunkReceiver) failRequest(
 			zap.Error(err), // It handles nil error
 		)
 	}
+}
+
+func (r *splunkReceiver) handleHealthReq(writer http.ResponseWriter, _ *http.Request) {
+	writer.WriteHeader(200)
 }
 
 func initJSONResponse(s string) []byte {

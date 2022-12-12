@@ -20,7 +20,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"strings"
 	"sync"
 
@@ -115,9 +115,9 @@ func (receiver *pubsubReceiver) Start(ctx context.Context, _ component.Host) err
 			return
 		}
 	})
-	receiver.tracesUnmarshaler = ptrace.NewProtoUnmarshaler()
-	receiver.metricsUnmarshaler = pmetric.NewProtoUnmarshaler()
-	receiver.logsUnmarshaler = plog.NewProtoUnmarshaler()
+	receiver.tracesUnmarshaler = &ptrace.ProtoUnmarshaler{}
+	receiver.metricsUnmarshaler = &pmetric.ProtoUnmarshaler{}
+	receiver.logsUnmarshaler = &plog.ProtoUnmarshaler{}
 	return startErr
 }
 
@@ -142,7 +142,7 @@ func (receiver *pubsubReceiver) handleLogStrings(ctx context.Context, message *p
 	ills := rls.ScopeLogs().AppendEmpty()
 	lr := ills.LogRecords().AppendEmpty()
 
-	lr.Body().SetStringVal(data)
+	lr.Body().SetStr(data)
 	lr.SetTimestamp(pcommon.NewTimestampFromTime(timestamp.AsTime()))
 	return receiver.logsConsumer.ConsumeLogs(ctx, out)
 }
@@ -153,7 +153,7 @@ func decompress(payload []byte, compression compression) ([]byte, error) {
 		if err != nil {
 			return nil, err
 		}
-		return ioutil.ReadAll(reader)
+		return io.ReadAll(reader)
 	}
 	return payload, nil
 }

@@ -17,6 +17,7 @@ package logstransformprocessor // import "github.com/open-telemetry/opentelemetr
 import (
 	"errors"
 
+	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/config"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/stanza/adapter"
@@ -28,15 +29,11 @@ type Config struct {
 	adapter.BaseConfig       `mapstructure:",squash"`
 }
 
-var _ config.Processor = (*Config)(nil)
+var _ component.Config = (*Config)(nil)
 
 // Validate checks if the processor configuration is valid
 func (cfg *Config) Validate() error {
-	operators, err := cfg.BaseConfig.DecodeOperatorConfigs()
-	if err != nil {
-		return err
-	}
-	if len(operators) == 0 {
+	if len(cfg.BaseConfig.Operators) == 0 {
 		return errors.New("no operators were configured for this logs transform processor")
 	}
 	return nil

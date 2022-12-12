@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/component/componenttest"
 	"go.opentelemetry.io/collector/config"
 	"go.opentelemetry.io/collector/config/configgrpc"
@@ -92,7 +93,7 @@ func test(nGoroutine int, nStream int, t *testing.T) {
 	exporter, server, m := doInit(nStream, t)
 	consumerNum.Store(-int32(nStream))
 	l := testdata.GenerateLogsOneLogRecordNoResource()
-	l.ResourceLogs().At(0).ScopeLogs().At(0).LogRecords().At(0).Body().SetIntVal(0)
+	l.ResourceLogs().At(0).ScopeLogs().At(0).LogRecords().At(0).Body().SetInt(0)
 
 	for i := 0; i < nStream; i++ {
 		err := exporter.pushLogs(context.Background(), l)
@@ -132,7 +133,7 @@ func doInit(numStream int, t *testing.T) (*swExporter, *grpc.Server, *mockLogHan
 	server, addr, m := initializeGRPC(grpc.MaxConcurrentStreams(100))
 	tt := &Config{
 		NumStreams:       numStream,
-		ExporterSettings: config.NewExporterSettings(config.NewComponentID(typeStr)),
+		ExporterSettings: config.NewExporterSettings(component.NewID(typeStr)),
 		QueueSettings: exporterhelper.QueueSettings{
 			Enabled:      true,
 			NumConsumers: 1,
@@ -148,8 +149,9 @@ func doInit(numStream int, t *testing.T) (*swExporter, *grpc.Server, *mockLogHan
 
 	oce := newLogsExporter(context.Background(), tt, componenttest.NewNopTelemetrySettings())
 	got, err := exporterhelper.NewLogsExporter(
-		tt,
+		context.Background(),
 		componenttest.NewNopExporterCreateSettings(),
+		tt,
 		oce.pushLogs,
 		exporterhelper.WithCapabilities(consumer.Capabilities{MutatesData: false}),
 		exporterhelper.WithRetry(tt.RetrySettings),

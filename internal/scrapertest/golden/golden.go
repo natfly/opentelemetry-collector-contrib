@@ -1,4 +1,4 @@
-// Copyright  The OpenTelemetry Authors
+// Copyright The OpenTelemetry Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,24 +16,25 @@ package golden // import "github.com/open-telemetry/opentelemetry-collector-cont
 
 import (
 	"encoding/json"
-	"io/ioutil"
+	"os"
 
 	"go.opentelemetry.io/collector/pdata/pmetric"
 )
 
 // ReadMetrics reads a pmetric.Metrics from the specified file
 func ReadMetrics(filePath string) (pmetric.Metrics, error) {
-	expectedFileBytes, err := ioutil.ReadFile(filePath)
+	expectedFileBytes, err := os.ReadFile(filePath)
 	if err != nil {
 		return pmetric.Metrics{}, err
 	}
-	unmarshaller := pmetric.NewJSONUnmarshaler()
+	unmarshaller := &pmetric.JSONUnmarshaler{}
 	return unmarshaller.UnmarshalMetrics(expectedFileBytes)
 }
 
 // WriteMetrics writes a pmetric.Metrics to the specified file
 func WriteMetrics(filePath string, metrics pmetric.Metrics) error {
-	fileBytes, err := pmetric.NewJSONMarshaler().MarshalMetrics(metrics)
+	unmarshaler := &pmetric.JSONMarshaler{}
+	fileBytes, err := unmarshaler.MarshalMetrics(metrics)
 	if err != nil {
 		return err
 	}
@@ -46,5 +47,5 @@ func WriteMetrics(filePath string, metrics pmetric.Metrics) error {
 		return err
 	}
 	b = append(b, []byte("\n")...)
-	return ioutil.WriteFile(filePath, b, 0600)
+	return os.WriteFile(filePath, b, 0600)
 }

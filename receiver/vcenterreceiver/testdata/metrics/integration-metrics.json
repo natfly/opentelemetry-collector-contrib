@@ -36,7 +36,7 @@
                                         "asInt": "67"
                                     }
                                 ],
-                                "aggregationTemporality": "AGGREGATION_TEMPORALITY_CUMULATIVE"
+                                "aggregationTemporality": 2
                             }
                         },
                         {
@@ -56,7 +56,7 @@
                         {
                             "name": "vcenter.host.memory.usage",
                             "description": "The amount of memory the host system is using.",
-                            "unit": "MBy",
+                            "unit": "MiBy",
                             "sum": {
                                 "dataPoints": [
                                     {
@@ -65,7 +65,7 @@
                                         "asInt": "1404"
                                     }
                                 ],
-                                "aggregationTemporality": "AGGREGATION_TEMPORALITY_CUMULATIVE"
+                                "aggregationTemporality": 2
                             }
                         },
                         {
@@ -122,7 +122,7 @@
                                         "asInt": "67"
                                     }
                                 ],
-                                "aggregationTemporality": "AGGREGATION_TEMPORALITY_CUMULATIVE"
+                                "aggregationTemporality": 2
                             }
                         },
                         {
@@ -142,7 +142,7 @@
                         {
                             "name": "vcenter.host.memory.usage",
                             "description": "The amount of memory the host system is using.",
-                            "unit": "MBy",
+                            "unit": "MiBy",
                             "sum": {
                                 "dataPoints": [
                                     {
@@ -151,7 +151,7 @@
                                         "asInt": "1404"
                                     }
                                 ],
-                                "aggregationTemporality": "AGGREGATION_TEMPORALITY_CUMULATIVE"
+                                "aggregationTemporality": 2
                             }
                         },
                         {
@@ -208,7 +208,7 @@
                                         "asInt": "67"
                                     }
                                 ],
-                                "aggregationTemporality": "AGGREGATION_TEMPORALITY_CUMULATIVE"
+                                "aggregationTemporality": 2
                             }
                         },
                         {
@@ -228,7 +228,7 @@
                         {
                             "name": "vcenter.host.memory.usage",
                             "description": "The amount of memory the host system is using.",
-                            "unit": "MBy",
+                            "unit": "MiBy",
                             "sum": {
                                 "dataPoints": [
                                     {
@@ -237,7 +237,7 @@
                                         "asInt": "1404"
                                     }
                                 ],
-                                "aggregationTemporality": "AGGREGATION_TEMPORALITY_CUMULATIVE"
+                                "aggregationTemporality": 2
                             }
                         },
                         {
@@ -265,6 +265,12 @@
                         "key": "vcenter.datastore.name",
                         "value": {
                             "stringValue": "LocalDS_0"
+                        }
+                    },
+                    {
+                        "key": "vcenter.cluster.name",
+                        "value": {
+                            "stringValue": "DC0_C0"
                         }
                     }
                 ]
@@ -309,7 +315,7 @@
                                         "asInt": "10995116277760"
                                     }
                                 ],
-                                "aggregationTemporality": "AGGREGATION_TEMPORALITY_CUMULATIVE"
+                                "aggregationTemporality": 2
                             }
                         },
                         {
@@ -399,7 +405,7 @@
                                         "asInt": "0"
                                     }
                                 ],
-                                "aggregationTemporality": "AGGREGATION_TEMPORALITY_CUMULATIVE"
+                                "aggregationTemporality": 2
                             }
                         },
                         {
@@ -414,13 +420,13 @@
                                         "asInt": "0"
                                     }
                                 ],
-                                "aggregationTemporality": "AGGREGATION_TEMPORALITY_CUMULATIVE"
+                                "aggregationTemporality": 2
                             }
                         },
                         {
                             "name": "vcenter.vm.memory.usage",
                             "description": "The amount of memory that is used by the virtual machine.",
-                            "unit": "MBy",
+                            "unit": "MiBy",
                             "sum": {
                                 "dataPoints": [
                                     {
@@ -429,7 +435,7 @@
                                         "asInt": "0"
                                     }
                                 ],
-                                "aggregationTemporality": "AGGREGATION_TEMPORALITY_CUMULATIVE"
+                                "aggregationTemporality": 2
                             }
                         }
                     ]
@@ -505,7 +511,7 @@
                                         "asInt": "0"
                                     }
                                 ],
-                                "aggregationTemporality": "AGGREGATION_TEMPORALITY_CUMULATIVE"
+                                "aggregationTemporality": 2
                             }
                         },
                         {
@@ -520,13 +526,13 @@
                                         "asInt": "0"
                                     }
                                 ],
-                                "aggregationTemporality": "AGGREGATION_TEMPORALITY_CUMULATIVE"
+                                "aggregationTemporality": 2
                             }
                         },
                         {
                             "name": "vcenter.vm.memory.usage",
                             "description": "The amount of memory that is used by the virtual machine.",
-                            "unit": "MBy",
+                            "unit": "MiBy",
                             "sum": {
                                 "dataPoints": [
                                     {
@@ -535,7 +541,7 @@
                                         "asInt": "0"
                                     }
                                 ],
-                                "aggregationTemporality": "AGGREGATION_TEMPORALITY_CUMULATIVE"
+                                "aggregationTemporality": 2
                             }
                         }
                     ]
@@ -611,7 +617,7 @@
                                         "asInt": "0"
                                     }
                                 ],
-                                "aggregationTemporality": "AGGREGATION_TEMPORALITY_CUMULATIVE"
+                                "aggregationTemporality": 2
                             }
                         },
                         {
@@ -626,13 +632,13 @@
                                         "asInt": "0"
                                     }
                                 ],
-                                "aggregationTemporality": "AGGREGATION_TEMPORALITY_CUMULATIVE"
+                                "aggregationTemporality": 2
                             }
                         },
                         {
                             "name": "vcenter.vm.memory.usage",
                             "description": "The amount of memory that is used by the virtual machine.",
-                            "unit": "MBy",
+                            "unit": "MiBy",
                             "sum": {
                                 "dataPoints": [
                                     {
@@ -641,7 +647,7 @@
                                         "asInt": "0"
                                     }
                                 ],
-                                "aggregationTemporality": "AGGREGATION_TEMPORALITY_CUMULATIVE"
+                                "aggregationTemporality": 2
                             }
                         }
                     ]
@@ -717,7 +723,7 @@
                                         "asInt": "0"
                                     }
                                 ],
-                                "aggregationTemporality": "AGGREGATION_TEMPORALITY_CUMULATIVE"
+                                "aggregationTemporality": 2
                             }
                         },
                         {
@@ -732,13 +738,13 @@
                                         "asInt": "0"
                                     }
                                 ],
-                                "aggregationTemporality": "AGGREGATION_TEMPORALITY_CUMULATIVE"
+                                "aggregationTemporality": 2
                             }
                         },
                         {
                             "name": "vcenter.vm.memory.usage",
                             "description": "The amount of memory that is used by the virtual machine.",
-                            "unit": "MBy",
+                            "unit": "MiBy",
                             "sum": {
                                 "dataPoints": [
                                     {
@@ -747,7 +753,7 @@
                                         "asInt": "0"
                                     }
                                 ],
-                                "aggregationTemporality": "AGGREGATION_TEMPORALITY_CUMULATIVE"
+                                "aggregationTemporality": 2
                             }
                         }
                     ]
@@ -784,7 +790,7 @@
                                         "asInt": "6882"
                                     }
                                 ],
-                                "aggregationTemporality": "AGGREGATION_TEMPORALITY_CUMULATIVE"
+                                "aggregationTemporality": 2
                             }
                         },
                         {
@@ -799,7 +805,7 @@
                                         "asInt": "6882"
                                     }
                                 ],
-                                "aggregationTemporality": "AGGREGATION_TEMPORALITY_CUMULATIVE"
+                                "aggregationTemporality": 2
                             }
                         },
                         {
@@ -835,7 +841,7 @@
                                         "asInt": "3"
                                     }
                                 ],
-                                "aggregationTemporality": "AGGREGATION_TEMPORALITY_CUMULATIVE"
+                                "aggregationTemporality": 2
                             }
                         },
                         {
@@ -850,7 +856,7 @@
                                         "asInt": "12883292160"
                                     }
                                 ],
-                                "aggregationTemporality": "AGGREGATION_TEMPORALITY_CUMULATIVE"
+                                "aggregationTemporality": 2
                             }
                         },
                         {
@@ -865,7 +871,7 @@
                                         "asInt": "12883292160"
                                     }
                                 ],
-                                "aggregationTemporality": "AGGREGATION_TEMPORALITY_CUMULATIVE"
+                                "aggregationTemporality": 2
                             }
                         },
                         {
@@ -901,7 +907,7 @@
                                         "asInt": "0"
                                     }
                                 ],
-                                "aggregationTemporality": "AGGREGATION_TEMPORALITY_CUMULATIVE"
+                                "aggregationTemporality": 2
                             }
                         }
                     ]
@@ -938,7 +944,7 @@
                                         "asInt": "9000"
                                     }
                                 ],
-                                "aggregationTemporality": "AGGREGATION_TEMPORALITY_CUMULATIVE"
+                                "aggregationTemporality": 2
                             }
                         },
                         {
@@ -953,7 +959,7 @@
                                         "asInt": "9000"
                                     }
                                 ],
-                                "aggregationTemporality": "AGGREGATION_TEMPORALITY_CUMULATIVE"
+                                "aggregationTemporality": 2
                             }
                         }
                     ]
@@ -990,7 +996,7 @@
                                         "asInt": "9000"
                                     }
                                 ],
-                                "aggregationTemporality": "AGGREGATION_TEMPORALITY_CUMULATIVE"
+                                "aggregationTemporality": 2
                             }
                         },
                         {
@@ -1005,7 +1011,7 @@
                                         "asInt": "9000"
                                     }
                                 ],
-                                "aggregationTemporality": "AGGREGATION_TEMPORALITY_CUMULATIVE"
+                                "aggregationTemporality": 2
                             }
                         }
                     ]

@@ -25,7 +25,6 @@ import (
 	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/google/uuid"
 	"go.opentelemetry.io/collector/component"
-	"go.opentelemetry.io/collector/config"
 	"go.opentelemetry.io/collector/consumer"
 	"go.opentelemetry.io/collector/consumer/consumererror"
 	"go.opentelemetry.io/collector/exporter/exporterhelper"
@@ -48,7 +47,7 @@ type emfExporter struct {
 	// Each (log group, log stream) keeps a separate pusher because of each (log group, log stream) requires separate stream token.
 	groupStreamToPusherMap map[string]map[string]cwlogs.Pusher
 	svcStructuredLog       *cwlogs.Client
-	config                 config.Exporter
+	config                 component.Config
 	logger                 *zap.Logger
 
 	metricTranslator metricTranslator
@@ -60,7 +59,7 @@ type emfExporter struct {
 
 // newEmfPusher func creates an EMF Exporter instance with data push callback func
 func newEmfPusher(
-	config config.Exporter,
+	config component.Config,
 	params component.ExporterCreateSettings,
 ) (component.MetricsExporter, error) {
 	if config == nil {
@@ -78,7 +77,7 @@ func newEmfPusher(
 	}
 
 	// create CWLogs client with aws session config
-	svcStructuredLog := cwlogs.NewClient(logger, awsConfig, params.BuildInfo, expConfig.LogGroupName, session)
+	svcStructuredLog := cwlogs.NewClient(logger, awsConfig, params.BuildInfo, expConfig.LogGroupName, expConfig.LogRetention, session)
 	collectorIdentifier, _ := uuid.NewRandom()
 
 	emfExporter := &emfExporter{
@@ -96,7 +95,7 @@ func newEmfPusher(
 
 // newEmfExporter creates a new exporter using exporterhelper
 func newEmfExporter(
-	config config.Exporter,
+	config component.Config,
 	set component.ExporterCreateSettings,
 ) (component.MetricsExporter, error) {
 	exp, err := newEmfPusher(config, set)
@@ -105,8 +104,9 @@ func newEmfExporter(
 	}
 
 	exporter, err := exporterhelper.NewMetricsExporter(
-		config,
+		context.TODO(),
 		set,
+		config,
 		exp.(*emfExporter).pushMetricsData,
 		exporterhelper.WithShutdown(exp.(*emfExporter).Shutdown),
 	)
@@ -124,7 +124,7 @@ func (emf *emfExporter) pushMetricsData(_ context.Context, md pmetric.Metrics) e
 		am := rm.Resource().Attributes()
 		if am.Len() > 0 {
 			am.Range(func(k string, v pcommon.Value) bool {
-				labels[k] = v.StringVal()
+				labels[k] = v.Str()
 				return true
 			})
 		}
@@ -137,8 +137,7 @@ func (emf *emfExporter) pushMetricsData(_ context.Context, md pmetric.Metrics) e
 	outputDestination := expConfig.OutputDestination
 
 	for i := 0; i < rms.Len(); i++ {
-		rm := rms.At(i)
-		err := emf.metricTranslator.translateOTelToGroupedMetric(&rm, groupedMetrics, expConfig)
+		err := emf.metricTranslator.translateOTelToGroupedMetric(rms.At(i), groupedMetrics, expConfig)
 		if err != nil {
 			return err
 		}
@@ -209,7 +208,7 @@ func (emf *emfExporter) listPushers() []cwlogs.Pusher {
 	emf.pusherMapLock.Lock()
 	defer emf.pusherMapLock.Unlock()
 
-	pushers := []cwlogs.Pusher{}
+	var pushers []cwlogs.Pusher
 	for _, pusherMap := range emf.groupStreamToPusherMap {
 		for _, pusher := range pusherMap {
 			pushers = append(pushers, pusher)

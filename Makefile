@@ -15,7 +15,7 @@ GROUP ?= all
 FOR_GROUP_TARGET=for-$(GROUP)-target
 
 FIND_MOD_ARGS=-type f -name "go.mod"
-TO_MOD_DIR=dirname {} \; | sort | egrep  '^./'
+TO_MOD_DIR=dirname {} \; | sort | grep -E '^./'
 EX_COMPONENTS=-not -path "./receiver/*" -not -path "./processor/*" -not -path "./exporter/*" -not -path "./extension/*"
 EX_INTERNAL=-not -path "./internal/*"
 
@@ -56,7 +56,7 @@ all-groups:
 	@echo "\nother: $(OTHER_MODS)"
 
 .PHONY: all
-all: all-common gotest otelcontribcol otelcontribcol-unstable
+all: install-tools all-common goporto multimod-verify gotest otelcontribcol otelcontribcol-unstable
 
 .PHONY: all-common
 all-common:
@@ -102,8 +102,12 @@ gofmt:
 golint:
 	$(MAKE) $(FOR_GROUP_TARGET) TARGET="lint"
 
+.PHONY: goimpi
+goimpi: install-tools
+	@$(MAKE) $(FOR_GROUP_TARGET) TARGET="impi"
+
 .PHONY: goporto
-goporto:
+goporto: install-tools
 	porto -w --include-internal --skip-dirs "^cmd$$" ./
 
 .PHONY: for-all
@@ -116,35 +120,16 @@ for-all:
 	 	$${CMD} ); \
 	done
 
-.PHONY: add-tag
-add-tag:
-	@[ "${TAG}" ] || ( echo ">> env var TAG is not set"; exit 1 )
-	@echo "Adding tag ${TAG}"
-	@git tag -a ${TAG} -s -m "Version ${TAG}"
-	@set -e; for dir in $(NONROOT_MODS); do \
-	  (echo Adding tag "$${dir:2}/$${TAG}" && \
-	 	git tag -a "$${dir:2}/$${TAG}" -s -m "Version ${dir:2}/${TAG}" ); \
-	done
-
-.PHONY: push-tag
-push-tag:
-	@[ "${TAG}" ] || ( echo ">> env var TAG is not set"; exit 1 )
-	@echo "Pushing tag ${TAG}"
-	@git push git@github.com:open-telemetry/opentelemetry-collector-contrib.git ${TAG}
-	@set -e; for dir in $(NONROOT_MODS); do \
-	  (echo Pushing tag "$${dir:2}/$${TAG}" && \
-	 	git push git@github.com:open-telemetry/opentelemetry-collector-contrib.git "$${dir:2}/$${TAG}"); \
-	done
-
-.PHONY: delete-tag
-delete-tag:
-	@[ "${TAG}" ] || ( echo ">> env var TAG is not set"; exit 1 )
-	@echo "Deleting tag ${TAG}"
-	@git tag -d ${TAG}
-	@set -e; for dir in $(NONROOT_MODS); do \
-	  (echo Deleting tag "$${dir:2}/$${TAG}" && \
-	 	git tag -d "$${dir:2}/$${TAG}" ); \
-	done
+COMMIT?=HEAD
+MODSET?=contrib-core
+REMOTE?=git@github.com:open-telemetry/opentelemetry-collector-contrib.git
+.PHONY: push-tags
+push-tags:
+	multimod verify
+	set -e; for tag in `multimod tag -m ${MODSET} -c ${COMMIT} --print-tags | grep -v "Using" `; do \
+		echo "pushing tag $${tag}"; \
+		git push ${REMOTE} $${tag}; \
+	done;
 
 DEPENDABOT_PATH=".github/dependabot.yml"
 .PHONY: gendependabot
@@ -260,12 +245,12 @@ generate:
 
 .PHONY: chlog-install
 chlog-install:
-	cd cmd/chloggen && $(GOCMD) install .
+	cd $(TOOLS_MOD_DIR) && $(GOCMD) install go.opentelemetry.io/build-tools/chloggen
 
 FILENAME?=$(shell git branch --show-current)
 .PHONY: chlog-new
 chlog-new: chlog-install
-	chloggen new -filename $(FILENAME)
+	chloggen new --filename $(FILENAME)
 
 .PHONY: chlog-validate
 chlog-validate: chlog-install
@@ -273,11 +258,11 @@ chlog-validate: chlog-install
 
 .PHONY: chlog-preview
 chlog-preview: chlog-install
-	chloggen update -dry
+	chloggen update --dry
 
 .PHONY: chlog-update
 chlog-update: chlog-install
-	chloggen update -version $(VERSION)
+	chloggen update --version $(VERSION)
 
 # Build the Collector executable.
 .PHONY: otelcontribcol
@@ -331,7 +316,7 @@ build-examples:
 .PHONY: deb-rpm-package
 %-package: ARCH ?= amd64
 %-package:
-	$(MAKE) otelcontribcol-linux_$(ARCH)
+	GOOS=linux GOARCH=$(ARCH) $(MAKE) otelcontribcol
 	docker build -t otelcontribcol-fpm internal/buildscripts/packaging/fpm
 	docker run --rm -v $(CURDIR):/repo -e PACKAGE=$* -e VERSION=$(VERSION) -e ARCH=$(ARCH) otelcontribcol-fpm
 
@@ -371,7 +356,8 @@ multimod-verify: install-tools
 
 .PHONY: multimod-prerelease
 multimod-prerelease: install-tools
-	multimod prerelease -v ./versions.yaml -m contrib-base
+	multimod prerelease -s=true -b=false -v ./versions.yaml -m contrib-base
+	$(MAKE) gotidy
 
 .PHONY: crosslink
 crosslink: install-tools
@@ -385,3 +371,17 @@ clean:
 	find . -type f -name 'coverage.html' -delete
 	find . -type f -name 'integration-coverage.txt' -delete
 	find . -type f -name 'integration-coverage.html' -delete
+
+.PHONY: genconfigdocs
+genconfigdocs:
+	cd cmd/configschema && $(GOCMD) run ./docsgen all
+
+.PHONY: generate-gh-issue-templates
+generate-gh-issue-templates:
+	for FILE in bug_report feature_request other; do \
+		YAML_FILE=".github/ISSUE_TEMPLATE/$${FILE}.yaml"; \
+		TMP_FILE=".github/ISSUE_TEMPLATE/$${FILE}.yaml.tmp"; \
+		cat "$${YAML_FILE}" > "$${TMP_FILE}"; \
+	 	FILE="$${TMP_FILE}" ./.github/workflows/scripts/add-component-options.sh > "$${YAML_FILE}"; \
+		rm "$${TMP_FILE}"; \
+	done

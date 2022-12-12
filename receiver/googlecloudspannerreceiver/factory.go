@@ -1,4 +1,4 @@
-// Copyright  The OpenTelemetry Authors
+// Copyright The OpenTelemetry Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -28,33 +28,35 @@ const (
 	typeStr   = "googlecloudspanner"
 	stability = component.StabilityLevelBeta
 
-	defaultCollectionInterval     = 60 * time.Second
-	defaultTopMetricsQueryMaxRows = 100
-	defaultBackfillEnabled        = false
+	defaultCollectionInterval                = 60 * time.Second
+	defaultTopMetricsQueryMaxRows            = 100
+	defaultBackfillEnabled                   = false
+	defaultHideTopnLockstatsRowrangestartkey = false
 )
 
 func NewFactory() component.ReceiverFactory {
 	return component.NewReceiverFactory(
 		typeStr,
 		createDefaultConfig,
-		component.WithMetricsReceiverAndStabilityLevel(createMetricsReceiver, stability))
+		component.WithMetricsReceiver(createMetricsReceiver, stability))
 }
 
-func createDefaultConfig() config.Receiver {
+func createDefaultConfig() component.Config {
 	return &Config{
 		ScraperControllerSettings: scraperhelper.ScraperControllerSettings{
-			ReceiverSettings:   config.NewReceiverSettings(config.NewComponentID(typeStr)),
+			ReceiverSettings:   config.NewReceiverSettings(component.NewID(typeStr)),
 			CollectionInterval: defaultCollectionInterval,
 		},
-		TopMetricsQueryMaxRows: defaultTopMetricsQueryMaxRows,
-		BackfillEnabled:        defaultBackfillEnabled,
+		TopMetricsQueryMaxRows:            defaultTopMetricsQueryMaxRows,
+		BackfillEnabled:                   defaultBackfillEnabled,
+		HideTopnLockstatsRowrangestartkey: defaultHideTopnLockstatsRowrangestartkey,
 	}
 }
 
 func createMetricsReceiver(
 	_ context.Context,
 	settings component.ReceiverCreateSettings,
-	baseCfg config.Receiver,
+	baseCfg component.Config,
 	consumer consumer.Metrics,
 ) (component.MetricsReceiver, error) {
 

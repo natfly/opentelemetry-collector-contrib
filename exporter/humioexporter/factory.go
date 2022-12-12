@@ -36,14 +36,14 @@ func NewFactory() component.ExporterFactory {
 	return component.NewExporterFactory(
 		typeStr,
 		createDefaultConfig,
-		component.WithTracesExporterAndStabilityLevel(createTracesExporter, stability),
+		component.WithTracesExporter(createTracesExporter, stability),
 	)
 }
 
 // Provides a struct with default values for all relevant configuration settings
-func createDefaultConfig() config.Exporter {
+func createDefaultConfig() component.Config {
 	return &Config{
-		ExporterSettings: config.NewExporterSettings(config.NewComponentID(typeStr)),
+		ExporterSettings: config.NewExporterSettings(component.NewID(typeStr)),
 
 		// Default settings inherited from exporter helper
 		QueueSettings: exporterhelper.NewDefaultQueueSettings(),
@@ -66,7 +66,7 @@ func createDefaultConfig() config.Exporter {
 func createTracesExporter(
 	ctx context.Context,
 	set component.ExporterCreateSettings,
-	config config.Exporter,
+	config component.Config,
 ) (component.TracesExporter, error) {
 	if config == nil {
 		return nil, errors.New("missing config")
@@ -85,8 +85,9 @@ func createTracesExporter(
 	exporter := newTracesExporter(cfg, set.TelemetrySettings)
 
 	return exporterhelper.NewTracesExporter(
-		cfg,
+		ctx,
 		set,
+		cfg,
 		exporter.pushTraceData,
 		exporterhelper.WithQueue(cfg.QueueSettings),
 		exporterhelper.WithRetry(cfg.RetrySettings),

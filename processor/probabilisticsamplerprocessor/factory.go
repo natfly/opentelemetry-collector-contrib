@@ -16,9 +16,12 @@ package probabilisticsamplerprocessor // import "github.com/open-telemetry/opent
 
 import (
 	"context"
+	"sync"
 
+	"go.opencensus.io/stats/view"
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/config"
+	"go.opentelemetry.io/collector/config/configtelemetry"
 	"go.opentelemetry.io/collector/consumer"
 )
 
@@ -29,26 +32,45 @@ const (
 	stability = component.StabilityLevelBeta
 )
 
+var onceMetrics sync.Once
+
 // NewFactory returns a new factory for the Probabilistic sampler processor.
 func NewFactory() component.ProcessorFactory {
+	onceMetrics.Do(func() {
+		// TODO: Handle this err
+		_ = view.Register(SamplingProcessorMetricViews(configtelemetry.LevelNormal)...)
+	})
+
 	return component.NewProcessorFactory(
 		typeStr,
 		createDefaultConfig,
-		component.WithTracesProcessorAndStabilityLevel(createTracesProcessor, stability))
+		component.WithTracesProcessor(createTracesProcessor, stability),
+		component.WithLogsProcessor(createLogsProcessor, component.StabilityLevelAlpha))
 }
 
-func createDefaultConfig() config.Processor {
+func createDefaultConfig() component.Config {
 	return &Config{
-		ProcessorSettings: config.NewProcessorSettings(config.NewComponentID(typeStr)),
+		ProcessorSettings: config.NewProcessorSettings(component.NewID(typeStr)),
+		AttributeSource:   defaultAttributeSource,
 	}
 }
 
 // createTracesProcessor creates a trace processor based on this config.
 func createTracesProcessor(
-	_ context.Context,
-	_ component.ProcessorCreateSettings,
-	cfg config.Processor,
+	ctx context.Context,
+	set component.ProcessorCreateSettings,
+	cfg component.Config,
 	nextConsumer consumer.Traces,
 ) (component.TracesProcessor, error) {
-	return newTracesProcessor(nextConsumer, cfg.(*Config))
+	return newTracesProcessor(ctx, set, cfg.(*Config), nextConsumer)
+}
+
+// createLogsProcessor creates a log processor based on this config.
+func createLogsProcessor(
+	ctx context.Context,
+	set component.ProcessorCreateSettings,
+	cfg component.Config,
+	nextConsumer consumer.Logs,
+) (component.LogsProcessor, error) {
+	return newLogsProcessor(ctx, set, nextConsumer, cfg.(*Config))
 }

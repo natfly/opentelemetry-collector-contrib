@@ -37,29 +37,31 @@ func NewFactory() component.ProcessorFactory {
 	return component.NewProcessorFactory(
 		typeStr,
 		createDefaultConfig,
-		component.WithMetricsProcessorAndStabilityLevel(createMetricsProcessor, stability),
-		component.WithLogsProcessorAndStabilityLevel(createLogsProcessor, stability),
-		component.WithTracesProcessorAndStabilityLevel(createTracesProcessor, stability),
+		component.WithMetricsProcessor(createMetricsProcessor, stability),
+		component.WithLogsProcessor(createLogsProcessor, stability),
+		component.WithTracesProcessor(createTracesProcessor, stability),
 	)
 }
 
-func createDefaultConfig() config.Processor {
+func createDefaultConfig() component.Config {
 	return &Config{
-		ProcessorSettings: config.NewProcessorSettings(config.NewComponentID(typeStr)),
+		ProcessorSettings: config.NewProcessorSettings(component.NewID(typeStr)),
 	}
 }
 
 func createMetricsProcessor(
-	_ context.Context,
+	ctx context.Context,
 	set component.ProcessorCreateSettings,
-	cfg config.Processor,
+	cfg component.Config,
 	nextConsumer consumer.Metrics,
 ) (component.MetricsProcessor, error) {
-	fp, err := newFilterMetricProcessor(set.Logger, cfg.(*Config))
+	fp, err := newFilterMetricProcessor(set.TelemetrySettings, cfg.(*Config))
 	if err != nil {
 		return nil, err
 	}
 	return processorhelper.NewMetricsProcessor(
+		ctx,
+		set,
 		cfg,
 		nextConsumer,
 		fp.processMetrics,
@@ -67,33 +69,37 @@ func createMetricsProcessor(
 }
 
 func createLogsProcessor(
-	_ context.Context,
+	ctx context.Context,
 	set component.ProcessorCreateSettings,
-	cfg config.Processor,
+	cfg component.Config,
 	nextConsumer consumer.Logs,
 ) (component.LogsProcessor, error) {
-	fp, err := newFilterLogsProcessor(set.Logger, cfg.(*Config))
+	fp, err := newFilterLogsProcessor(set.TelemetrySettings, cfg.(*Config))
 	if err != nil {
 		return nil, err
 	}
 	return processorhelper.NewLogsProcessor(
+		ctx,
+		set,
 		cfg,
 		nextConsumer,
-		fp.ProcessLogs,
+		fp.processLogs,
 		processorhelper.WithCapabilities(processorCapabilities))
 }
 
 func createTracesProcessor(
-	_ context.Context,
+	ctx context.Context,
 	set component.ProcessorCreateSettings,
-	cfg config.Processor,
+	cfg component.Config,
 	nextConsumer consumer.Traces,
 ) (component.TracesProcessor, error) {
-	fp, err := newFilterSpansProcessor(set.Logger, cfg.(*Config))
+	fp, err := newFilterSpansProcessor(set.TelemetrySettings, cfg.(*Config))
 	if err != nil {
 		return nil, err
 	}
 	return processorhelper.NewTracesProcessor(
+		ctx,
+		set,
 		cfg,
 		nextConsumer,
 		fp.processTraces,

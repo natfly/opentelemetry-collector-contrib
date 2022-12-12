@@ -25,6 +25,7 @@ import (
 	"github.com/go-playground/validator/v10"
 	"github.com/go-playground/validator/v10/non-standard/validators"
 	en_translations "github.com/go-playground/validator/v10/translations/en"
+	"go.opentelemetry.io/collector/confmap"
 	"go.opentelemetry.io/collector/confmap/provider/fileprovider"
 	"go.opentelemetry.io/collector/pdata/pcommon"
 )
@@ -51,17 +52,15 @@ func (mn attributeName) RenderUnexported() (string, error) {
 
 // ValueType defines an attribute value type.
 type ValueType struct {
-	// ValueType is type of the metric number, options are "double", "int".
-	ValueType pcommon.ValueType
+	// ValueType is type of the attribute value.
+	ValueType pcommon.ValueType `validate:"required,notblank"`
 }
 
 // UnmarshalText implements the encoding.TextUnmarshaler interface.
 func (mvt *ValueType) UnmarshalText(text []byte) error {
 	switch vtStr := string(text); vtStr {
-	case "":
-		mvt.ValueType = pcommon.ValueTypeEmpty
 	case "string":
-		mvt.ValueType = pcommon.ValueTypeString
+		mvt.ValueType = pcommon.ValueTypeStr
 	case "int":
 		mvt.ValueType = pcommon.ValueTypeInt
 	case "double":
@@ -84,7 +83,7 @@ func (mvt ValueType) String() string {
 // Primitive returns name of primitive type for the ValueType.
 func (mvt ValueType) Primitive() string {
 	switch mvt.ValueType {
-	case pcommon.ValueTypeString:
+	case pcommon.ValueTypeStr:
 		return "string"
 	case pcommon.ValueTypeInt:
 		return "int64"
@@ -97,6 +96,24 @@ func (mvt ValueType) Primitive() string {
 	default:
 		return ""
 	}
+}
+
+func (mvt ValueType) TestValue() string {
+	switch mvt.ValueType {
+	case pcommon.ValueTypeEmpty, pcommon.ValueTypeStr:
+		return `"attr-val"`
+	case pcommon.ValueTypeInt:
+		return "1"
+	case pcommon.ValueTypeDouble:
+		return "1.1"
+	case pcommon.ValueTypeBool:
+		return "true"
+	case pcommon.ValueTypeMap:
+		return `pcommon.NewMap()`
+	case pcommon.ValueTypeSlice:
+		return `pcommon.NewSlice()`
+	}
+	return ""
 }
 
 type metric struct {
@@ -139,14 +156,12 @@ func (m metric) IsEnabled() bool {
 type attribute struct {
 	// Description describes the purpose of the attribute.
 	Description string `validate:"notblank"`
-	// Value can optionally specify the value this attribute will have.
-	// For example, the attribute may have the identifier `MemState` to its
-	// value may be `state` when used.
-	Value string
+	// NameOverride can be used to override the attribute name.
+	NameOverride string `mapstructure:"name_override"`
 	// Enum can optionally describe the set of values to which the attribute can belong.
 	Enum []string
 	// Type is an attribute type.
-	Type ValueType `mapstructure:"type"`
+	Type ValueType `mapstructure:"type" validate:"dive"`
 }
 
 type metadata struct {
@@ -166,9 +181,6 @@ type templateContext struct {
 	metadata
 	// Package name for generated code.
 	Package string
-	// ExpGen identifies whether the experimental metrics generator is used.
-	// TODO: Remove once the old mdata generator is gone.
-	ExpGen bool
 }
 
 func loadMetadata(filePath string) (metadata, error) {
@@ -183,7 +195,7 @@ func loadMetadata(filePath string) (metadata, error) {
 	}
 
 	var md metadata
-	if err := m.UnmarshalExact(&md); err != nil {
+	if err := m.Unmarshal(&md, confmap.WithErrorUnused()); err != nil {
 		return metadata{}, err
 	}
 

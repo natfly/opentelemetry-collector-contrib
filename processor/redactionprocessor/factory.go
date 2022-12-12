@@ -36,32 +36,34 @@ func NewFactory() component.ProcessorFactory {
 	return component.NewProcessorFactory(
 		typeStr,
 		createDefaultConfig,
-		component.WithTracesProcessorAndStabilityLevel(createTracesProcessor, stability),
+		component.WithTracesProcessor(createTracesProcessor, stability),
 	)
 }
 
-func createDefaultConfig() config.Processor {
+func createDefaultConfig() component.Config {
 	return &Config{
-		ProcessorSettings: config.NewProcessorSettings(config.NewComponentID(typeStr)),
+		ProcessorSettings: config.NewProcessorSettings(component.NewID(typeStr)),
 	}
 }
 
 // createTracesProcessor creates an instance of redaction for processing traces
 func createTracesProcessor(
 	ctx context.Context,
-	params component.ProcessorCreateSettings,
-	cfg config.Processor,
+	set component.ProcessorCreateSettings,
+	cfg component.Config,
 	next consumer.Traces,
 ) (component.TracesProcessor, error) {
 	oCfg := cfg.(*Config)
 
-	redaction, err := newRedaction(ctx, oCfg, params.Logger, next)
+	redaction, err := newRedaction(ctx, oCfg, set.Logger, next)
 	if err != nil {
 		// TODO: Placeholder for an error metric in the next PR
 		return nil, fmt.Errorf("error creating a redaction processor: %w", err)
 	}
 
 	return processorhelper.NewTracesProcessor(
+		ctx,
+		set,
 		cfg,
 		next,
 		redaction.processTraces,

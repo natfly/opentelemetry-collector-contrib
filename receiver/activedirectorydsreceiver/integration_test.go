@@ -1,4 +1,4 @@
-// Copyright  The OpenTelemetry Authors
+// Copyright The OpenTelemetry Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -30,8 +30,8 @@ import (
 )
 
 /*
-	TestIntegration test scraping metrics from a running Active Directory domain controller.
-	The domain controller must be set up locally outside of this test in order for it to pass.
+TestIntegration test scraping metrics from a running Active Directory domain controller.
+The domain controller must be set up locally outside of this test in order for it to pass.
 */
 func TestIntegration(t *testing.T) {
 	t.Parallel()

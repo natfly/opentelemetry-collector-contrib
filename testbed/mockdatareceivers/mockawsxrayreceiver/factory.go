@@ -28,7 +28,7 @@ const (
 	// The value of "type" key in configuration.
 	typeStr = "mock_receiver"
 	// stability level of test component
-	stability = component.StabilityLevelInDevelopment
+	stability = component.StabilityLevelDevelopment
 
 	// Default endpoints to bind to.
 	defaultEndpoint = ":7276"
@@ -39,13 +39,13 @@ func NewFactory() component.ReceiverFactory {
 	return component.NewReceiverFactory(
 		typeStr,
 		createDefaultConfig,
-		component.WithTracesReceiverAndStabilityLevel(createTracesReceiver, stability))
+		component.WithTracesReceiver(createTracesReceiver, stability))
 }
 
 // CreateDefaultConfig creates the default configuration for Jaeger receiver.
-func createDefaultConfig() config.Receiver {
+func createDefaultConfig() component.Config {
 	return &Config{
-		ReceiverSettings: config.NewReceiverSettings(config.NewComponentID(typeStr)),
+		ReceiverSettings: config.NewReceiverSettings(component.NewID(typeStr)),
 		Endpoint:         defaultEndpoint,
 	}
 }
@@ -54,7 +54,7 @@ func createDefaultConfig() config.Receiver {
 func createTracesReceiver(
 	ctx context.Context,
 	params component.ReceiverCreateSettings,
-	cfg config.Receiver,
+	cfg component.Config,
 	nextConsumer consumer.Traces,
 ) (component.TracesReceiver, error) {
 	rCfg := cfg.(*Config)

@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// nolint:errcheck
 package sapmreceiver // import "github.com/open-telemetry/opentelemetry-collector-contrib/receiver/sapmreceiver"
 
 import (
@@ -21,7 +20,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"sync"
 
@@ -38,7 +37,7 @@ import (
 
 var gzipWriterPool = &sync.Pool{
 	New: func() interface{} {
-		return gzip.NewWriter(ioutil.Discard)
+		return gzip.NewWriter(io.Discard)
 	},
 }
 
@@ -81,7 +80,7 @@ func (sr *sapmReceiver) handleRequest(req *http.Request) error {
 			for i := 0; i < rSpans.Len(); i++ {
 				rSpan := rSpans.At(i)
 				attrs := rSpan.Resource().Attributes()
-				attrs.UpsertString(splunk.SFxAccessTokenLabel, accessToken)
+				attrs.PutStr(splunk.SFxAccessTokenLabel, accessToken)
 			}
 		}
 	}
@@ -120,7 +119,10 @@ func (sr *sapmReceiver) HTTPHandlerFunc(rw http.ResponseWriter, req *http.Reques
 	// write the response if client does not accept gzip encoding
 	if req.Header.Get(sapmprotocol.AcceptEncodingHeaderName) != sapmprotocol.GZipEncodingHeaderValue {
 		// write the response bytes
-		rw.Write(respBytes)
+		_, err = rw.Write(respBytes)
+		if err != nil {
+			rw.WriteHeader(http.StatusBadRequest)
+		}
 		return
 	}
 
@@ -151,7 +153,10 @@ func (sr *sapmReceiver) HTTPHandlerFunc(rw http.ResponseWriter, req *http.Reques
 
 	// write the successfully gzipped payload
 	rw.Header().Set(sapmprotocol.ContentEncodingHeaderName, sapmprotocol.GZipEncodingHeaderValue)
-	rw.Write(gzipBuffer.Bytes())
+	_, err = rw.Write(gzipBuffer.Bytes())
+	if err != nil {
+		rw.WriteHeader(http.StatusBadRequest)
+	}
 }
 
 // Start starts the sapmReceiver's server.
@@ -207,21 +212,25 @@ func newReceiver(
 	defaultResponse := &splunksapm.PostSpansResponse{}
 	defaultResponseBytes, err := defaultResponse.Marshal()
 	if err != nil {
-		return nil, fmt.Errorf("failed to marshal default response body for %v receiver: %w", config.ID(), err)
+		return nil, fmt.Errorf("failed to marshal default response body for %v receiver: %w", params.ID, err)
 	}
 	transport := "http"
 	if config.TLSSetting != nil {
 		transport = "https"
+	}
+	obsrecv, err := obsreport.NewReceiver(obsreport.ReceiverSettings{
+		ReceiverID:             params.ID,
+		Transport:              transport,
+		ReceiverCreateSettings: params,
+	})
+	if err != nil {
+		return nil, err
 	}
 	return &sapmReceiver{
 		settings:        params.TelemetrySettings,
 		config:          config,
 		nextConsumer:    nextConsumer,
 		defaultResponse: defaultResponseBytes,
-		obsrecv: obsreport.NewReceiver(obsreport.ReceiverSettings{
-			ReceiverID:             config.ID(),
-			Transport:              transport,
-			ReceiverCreateSettings: params,
-		}),
+		obsrecv:         obsrecv,
 	}, nil
 }

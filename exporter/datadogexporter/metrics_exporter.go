@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// nolint:gocritic
 package datadogexporter // import "github.com/open-telemetry/opentelemetry-collector-contrib/exporter/datadogexporter"
 
 import (
@@ -23,34 +22,36 @@ import (
 	"sync"
 	"time"
 
+	"github.com/DataDog/datadog-agent/pkg/otlp/model/source"
+	"github.com/DataDog/datadog-agent/pkg/otlp/model/translator"
 	"go.opentelemetry.io/collector/component"
+	"go.opentelemetry.io/collector/featuregate"
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/pmetric"
-	"go.opentelemetry.io/collector/service/featuregate"
 	"go.uber.org/multierr"
 	"go.uber.org/zap"
-	"gopkg.in/zorkian/go-datadog-api.v2"
+	zorkian "gopkg.in/zorkian/go-datadog-api.v2"
 
-	"github.com/DataDog/datadog-agent/pkg/otlp/model/source"
-
+	"github.com/open-telemetry/opentelemetry-collector-contrib/exporter/datadogexporter/internal/clientutil"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/exporter/datadogexporter/internal/metadata"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/exporter/datadogexporter/internal/metrics"
-	"github.com/open-telemetry/opentelemetry-collector-contrib/exporter/datadogexporter/internal/model/translator"
+	"github.com/open-telemetry/opentelemetry-collector-contrib/exporter/datadogexporter/internal/metrics/sketches"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/exporter/datadogexporter/internal/scrub"
-	"github.com/open-telemetry/opentelemetry-collector-contrib/exporter/datadogexporter/internal/sketches"
-	"github.com/open-telemetry/opentelemetry-collector-contrib/exporter/datadogexporter/internal/utils"
 )
 
 type metricsExporter struct {
 	params         component.ExporterCreateSettings
 	cfg            *Config
 	ctx            context.Context
-	client         *datadog.Client
+	client         *zorkian.Client
 	tr             *translator.Translator
 	scrubber       scrub.Scrubber
-	retrier        *utils.Retrier
+	retrier        *clientutil.Retrier
 	onceMetadata   *sync.Once
 	sourceProvider source.Provider
+	// getPushTime returns a Unix time in nanoseconds, representing the time pushing metrics.
+	// It will be overwritten in tests.
+	getPushTime func() uint64
 }
 
 // translatorFromConfig creates a new metrics translator from the exporter
@@ -64,8 +65,7 @@ func translatorFromConfig(logger *zap.Logger, cfg *Config, sourceProvider source
 		options = append(options, translator.WithCountSumMetrics())
 	}
 
-	switch cfg.Metrics.SummaryConfig.Mode {
-	case SummaryModeGauges:
+	if cfg.Metrics.SummaryConfig.Mode == SummaryModeGauges {
 		options = append(options, translator.WithQuantiles())
 	}
 
@@ -97,11 +97,11 @@ func translatorFromConfig(logger *zap.Logger, cfg *Config, sourceProvider source
 }
 
 func newMetricsExporter(ctx context.Context, params component.ExporterCreateSettings, cfg *Config, onceMetadata *sync.Once, sourceProvider source.Provider) (*metricsExporter, error) {
-	client := utils.CreateClient(cfg.API.Key, cfg.Metrics.TCPAddr.Endpoint)
-	client.ExtraHeader["User-Agent"] = utils.UserAgent(params.BuildInfo)
-	client.HttpClient = utils.NewHTTPClient(cfg.TimeoutSettings, cfg.LimitedHTTPClientSettings.TLSSetting.InsecureSkipVerify)
+	client := clientutil.CreateZorkianClient(cfg.API.Key, cfg.Metrics.TCPAddr.Endpoint)
+	client.ExtraHeader["User-Agent"] = clientutil.UserAgent(params.BuildInfo)
+	client.HttpClient = clientutil.NewHTTPClient(cfg.TimeoutSettings, cfg.LimitedHTTPClientSettings.TLSSetting.InsecureSkipVerify)
 
-	if err := utils.ValidateAPIKey(params.Logger, client); err != nil && cfg.API.FailOnInvalidKey {
+	if err := clientutil.ValidateAPIKeyZorkian(params.Logger, client); err != nil && cfg.API.FailOnInvalidKey {
 		return nil, err
 	}
 
@@ -118,9 +118,10 @@ func newMetricsExporter(ctx context.Context, params component.ExporterCreateSett
 		client:         client,
 		tr:             tr,
 		scrubber:       scrubber,
-		retrier:        utils.NewRetrier(params.Logger, cfg.RetrySettings, scrubber),
+		retrier:        clientutil.NewRetrier(params.Logger, cfg.RetrySettings, scrubber),
 		onceMetadata:   onceMetadata,
 		sourceProvider: sourceProvider,
+		getPushTime:    func() uint64 { return uint64(time.Now().UTC().UnixNano()) },
 	}, nil
 }
 
@@ -139,8 +140,8 @@ func (exp *metricsExporter) pushSketches(ctx context.Context, sl sketches.Sketch
 		return fmt.Errorf("failed to build sketches HTTP request: %w", err)
 	}
 
-	utils.SetDDHeaders(req.Header, exp.params.BuildInfo, exp.cfg.API.Key)
-	utils.SetExtraHeaders(req.Header, utils.ProtobufHeaders)
+	clientutil.SetDDHeaders(req.Header, exp.params.BuildInfo, exp.cfg.API.Key)
+	clientutil.SetExtraHeaders(req.Header, clientutil.ProtobufHeaders)
 	resp, err := exp.client.HttpClient.Do(req)
 
 	if err != nil {
@@ -159,7 +160,6 @@ func (exp *metricsExporter) PushMetricsDataScrubbed(ctx context.Context, md pmet
 }
 
 func (exp *metricsExporter) PushMetricsData(ctx context.Context, md pmetric.Metrics) error {
-
 	// Start host metadata with resource attributes from
 	// the first payload.
 	if exp.cfg.HostMetadata.Enabled {
@@ -171,15 +171,21 @@ func (exp *metricsExporter) PushMetricsData(ctx context.Context, md pmetric.Metr
 			go metadata.Pusher(exp.ctx, exp.params, newMetadataConfigfromConfig(exp.cfg), exp.sourceProvider, attrs)
 		})
 	}
-
-	consumer := metrics.NewConsumer()
-	pushTime := uint64(time.Now().UTC().UnixNano())
+	consumer := metrics.NewZorkianConsumer()
 	err := exp.tr.MapMetrics(ctx, md, consumer)
 	if err != nil {
 		return fmt.Errorf("failed to map metrics: %w", err)
 	}
-	ms, sl := consumer.All(pushTime, exp.params.BuildInfo)
-	metrics.ProcessMetrics(ms)
+	src, err := exp.sourceProvider.Source(ctx)
+	if err != nil {
+		return err
+	}
+	var tags []string
+	if src.Kind == source.AWSECSFargateKind {
+		tags = append(tags, exp.cfg.HostMetadata.Tags...)
+	}
+	ms, sl := consumer.All(exp.getPushTime(), exp.params.BuildInfo, tags)
+	ms = metrics.PrepareZorkianSystemMetrics(ms)
 
 	err = nil
 	if len(ms) > 0 {

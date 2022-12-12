@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// nolint:errcheck
 package signalfxreceiver // import "github.com/open-telemetry/opentelemetry-collector-contrib/receiver/signalfxreceiver"
 
 import (
@@ -21,7 +20,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"sync"
 	"time"
@@ -33,7 +32,6 @@ import (
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/consumer"
 	"go.opentelemetry.io/collector/obsreport"
-	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/plog"
 	conventions "go.opentelemetry.io/collector/semconv/v1.6.1"
 	"go.uber.org/zap"
@@ -97,22 +95,26 @@ var _ component.MetricsReceiver = (*sfxReceiver)(nil)
 func newReceiver(
 	settings component.ReceiverCreateSettings,
 	config Config,
-) *sfxReceiver {
+) (*sfxReceiver, error) {
 	transport := "http"
 	if config.TLSSetting != nil {
 		transport = "https"
 	}
+	obsrecv, err := obsreport.NewReceiver(obsreport.ReceiverSettings{
+		ReceiverID:             settings.ID,
+		Transport:              transport,
+		ReceiverCreateSettings: settings,
+	})
+	if err != nil {
+		return nil, err
+	}
 	r := &sfxReceiver{
 		settings: settings,
 		config:   &config,
-		obsrecv: obsreport.NewReceiver(obsreport.ReceiverSettings{
-			ReceiverID:             config.ID(),
-			Transport:              transport,
-			ReceiverCreateSettings: settings,
-		}),
+		obsrecv:  obsrecv,
 	}
 
-	return r
+	return r, nil
 }
 
 func (r *sfxReceiver) RegisterMetricsConsumer(mc consumer.Metrics) {
@@ -200,7 +202,7 @@ func (r *sfxReceiver) readBody(ctx context.Context, resp http.ResponseWriter, re
 		}
 	}
 
-	body, err := ioutil.ReadAll(bodyReader)
+	body, err := io.ReadAll(bodyReader)
 	if err != nil {
 		r.failRequest(ctx, resp, http.StatusBadRequest, errReadBodyRespBody, err)
 		return nil, false
@@ -215,7 +217,10 @@ func (r *sfxReceiver) writeResponse(ctx context.Context, resp http.ResponseWrite
 	}
 
 	resp.WriteHeader(http.StatusOK)
-	resp.Write(okRespBody)
+	_, err = resp.Write(okRespBody)
+	if err != nil {
+		r.failRequest(ctx, resp, http.StatusInternalServerError, errNextConsumerRespBody, err)
+	}
 }
 
 func (r *sfxReceiver) handleDatapointReq(resp http.ResponseWriter, req *http.Request) {
@@ -239,7 +244,7 @@ func (r *sfxReceiver) handleDatapointReq(resp http.ResponseWriter, req *http.Req
 
 	if len(msg.Datapoints) == 0 {
 		r.obsrecv.EndMetricsOp(ctx, typeStr, 0, nil)
-		resp.Write(okRespBody)
+		_, _ = resp.Write(okRespBody)
 		return
 	}
 
@@ -253,7 +258,7 @@ func (r *sfxReceiver) handleDatapointReq(resp http.ResponseWriter, req *http.Req
 			for i := 0; i < md.ResourceMetrics().Len(); i++ {
 				rm := md.ResourceMetrics().At(i)
 				res := rm.Resource()
-				res.Attributes().Insert(splunk.SFxAccessTokenLabel, pcommon.NewValueString(accessToken))
+				res.Attributes().PutStr(splunk.SFxAccessTokenLabel, accessToken)
 			}
 		}
 	}
@@ -285,7 +290,7 @@ func (r *sfxReceiver) handleEventReq(resp http.ResponseWriter, req *http.Request
 
 	if len(msg.Events) == 0 {
 		r.obsrecv.EndMetricsOp(ctx, typeStr, 0, nil)
-		resp.Write(okRespBody)
+		_, _ = resp.Write(okRespBody)
 		return
 	}
 
@@ -296,7 +301,7 @@ func (r *sfxReceiver) handleEventReq(resp http.ResponseWriter, req *http.Request
 
 	if r.config.AccessTokenPassthrough {
 		if accessToken := req.Header.Get(splunk.SFxAccessTokenHeader); accessToken != "" {
-			rl.Resource().Attributes().InsertString(splunk.SFxAccessTokenLabel, accessToken)
+			rl.Resource().Attributes().PutStr(splunk.SFxAccessTokenLabel, accessToken)
 		}
 	}
 
@@ -325,7 +330,7 @@ func (r *sfxReceiver) failRequest(
 			r.settings.Logger.Warn(
 				"Error writing HTTP response message",
 				zap.Error(writeErr),
-				zap.String("receiver", r.config.ID().String()))
+				zap.String("receiver", r.settings.ID.String()))
 		}
 	}
 

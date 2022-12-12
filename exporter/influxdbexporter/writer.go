@@ -17,8 +17,9 @@ package influxdbexporter // import "github.com/open-telemetry/opentelemetry-coll
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"net/url"
 	"sort"
@@ -45,22 +46,40 @@ func newInfluxHTTPWriter(logger common.Logger, config *Config, host component.Ho
 		return nil, err
 	}
 	if writeURL.Path == "" || writeURL.Path == "/" {
-		writeURL, err = writeURL.Parse("api/v2/write")
-		if err != nil {
-			return nil, err
+		if config.V1Compatibility.Enabled {
+			writeURL, err = writeURL.Parse("write")
+			if err != nil {
+				return nil, err
+			}
+		} else {
+			writeURL, err = writeURL.Parse("api/v2/write")
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
 	queryValues := writeURL.Query()
-	queryValues.Set("org", config.Org)
-	queryValues.Set("bucket", config.Bucket)
 	queryValues.Set("precision", "ns")
-	writeURL.RawQuery = queryValues.Encode()
 
-	if config.Token != "" {
-		config.HTTPClientSettings.Headers["Authorization"] = "Token " + config.Token
+	if config.V1Compatibility.Enabled {
+		queryValues.Set("db", config.V1Compatibility.DB)
+
+		if config.V1Compatibility.Username != "" && config.V1Compatibility.Password != "" {
+			var basicAuth []byte
+			base64.StdEncoding.Encode(basicAuth, []byte(config.V1Compatibility.Username+":"+config.V1Compatibility.Password))
+			config.HTTPClientSettings.Headers["Authorization"] = "Basic " + string(basicAuth)
+		}
+	} else {
+		queryValues.Set("org", config.Org)
+		queryValues.Set("bucket", config.Bucket)
+
+		if config.Token != "" {
+			config.HTTPClientSettings.Headers["Authorization"] = "Token " + config.Token
+		}
 	}
 
-	httpClient, err := config.HTTPClientSettings.ToClient(host.GetExtensions(), settings)
+	writeURL.RawQuery = queryValues.Encode()
+	httpClient, err := config.HTTPClientSettings.ToClient(host, settings)
 	if err != nil {
 		return nil, err
 	}
@@ -122,7 +141,7 @@ func (b *influxHTTPWriterBatch) flushAndClose(ctx context.Context) error {
 
 	if res, err := b.w.httpClient.Do(req); err != nil {
 		return err
-	} else if body, err := ioutil.ReadAll(res.Body); err != nil {
+	} else if body, err := io.ReadAll(res.Body); err != nil {
 		return err
 	} else if err = res.Body.Close(); err != nil {
 		return err
